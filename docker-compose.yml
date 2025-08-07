@@ -1,0 +1,40 @@
+services:
+  whisperx:
+    image: ghcr.io/jim60105/whisperx:latest
+    working_dir: /work
+    user: "0:0"
+    volumes:
+      - ./audio:/work/audio:ro
+      - ./out:/work/out
+      - ./run.sh:/work/run.sh:ro
+      - whisper_cache:/root/.cache
+    environment:
+      - HF_TOKEN=${HF_TOKEN}           # .env: HF_TOKEN=hf_xxx
+      - HF_HOME=/root/.cache/huggingface
+      - LANGUAGE=ru
+      - MODEL=large-v3
+      - DEVICE=cuda
+      - COMPUTE_TYPE=float16
+      - BATCH_SIZE=2
+      - BEAM_SIZE=5
+      - TEMPERATURE=0
+      - TEMP_INC=0.2
+      - VAD=pyannote
+      - VAD_ONSET=0.30
+      - VAD_OFFSET=0.25
+      - MIN_SPK=1
+      - MAX_SPK=4
+      - FORMAT=srt
+      - HF_HUB_ENABLE_HF_TRANSFER=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    entrypoint: ["/bin/sh","-lc"]
+    command: "/work/run.sh"
+
+volumes:
+  whisper_cache:
