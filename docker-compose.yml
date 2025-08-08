@@ -1,5 +1,6 @@
 services:
   whisperx:
+    container_name: whisperx-processor
     image: ghcr.io/jim60105/whisperx:latest
     working_dir: /work
     user: "0:0"
@@ -35,6 +36,61 @@ services:
               capabilities: [gpu]
     entrypoint: ["/bin/sh","-lc"]
     command: "/work/run.sh"
+    networks:
+     - whisperx-default
+
+  api:
+    container_name: whisperx-api
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    working_dir: /work
+    user: "0:0"
+    ports:
+      - "8800:8800"
+    volumes:
+      - ./out:/work/out
+      - ./uploads:/work/uploads
+      - ./config:/work/config
+      - ./app:/work/app:ro
+      - whisper_cache:/root/.cache
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HOME=/root/.cache/huggingface
+      - LANGUAGE=ru
+      - MODEL=large-v3
+      - DEVICE=cuda
+      - COMPUTE_TYPE=float16
+      - BATCH_SIZE=2
+      - BEAM_SIZE=5
+      - TEMPERATURE=0
+      - TEMP_INC=0.2
+      - VAD=pyannote
+      - VAD_ONSET=0.30
+      - VAD_OFFSET=0.25
+      - MIN_SPK=1
+      - MAX_SPK=4
+      - FORMAT=srt
+      - HF_HUB_ENABLE_HF_TRANSFER=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    entrypoint: ["uvicorn", "app.main:app"]
+    command: ["--host", "0.0.0.0", "--port", "8800", "--workers", "1", "--access-log", "--log-level", "debug"]
+    networks:
+      - proxy-network
+      - whisperx-default
 
 volumes:
   whisper_cache:
+
+networks:
+  proxy-network:
+    external: true
+    name: selfhost_proxy-network
+  whisperx-default:
+    driver: bridge  

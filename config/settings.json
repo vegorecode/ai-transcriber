@@ -1,0 +1,18 @@
+{
+  "language": "ru",
+  "model": "large-v3",
+  "device": "cuda",
+  "compute_type": "float16",
+  "batch_size": 2,
+  "beam_size": 5,
+  "temperature": 0.0,
+  "temperature_increment_on_fallback": 0.2,
+  "vad_method": "pyannote",
+  "vad_onset": 0.3,
+  "vad_offset": 0.25,
+  "diarize": true,
+  "min_speakers": 1,
+  "max_speakers": 4,
+  "output_format": "srt",
+  "length_penalty": 1.1
+}

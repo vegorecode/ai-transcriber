@@ -121,3 +121,54 @@ docker compose run --rm whisperx
 ## Пример
 
 Предоставленный "audio/Глубинное интервью\_Серега.srt" – транскрипт на актуальных настрйоках.
+
+---
+
+## HTTP API (FastAPI)
+
+Для удалённой загрузки файла и получения транскрипта добавлен сервис `api` (FastAPI) с простой веб-страницей.
+
+### Запуск API
+
+```
+docker compose up -d --build api
+```
+
+Откройте:
+
+- Веб-страница загрузки: `http://localhost:8800/`
+- Swagger-документация: `http://localhost:8800/docs`
+
+Параметры распознавания можно менять «на горячую» на странице `http://localhost:8800/settings` — они сохраняются в `./config/settings.json` и применяются к новым транскрипциям. Значения по умолчанию берутся из переменных окружения контейнера (см. `docker-compose.yml`).
+
+### Пример запроса CLI
+
+```
+curl -F "file=@audio/sample.mp3" \
+     http://localhost:8800/api/transcribe
+
+# Получить список задач
+curl http://localhost:8800/api/jobs
+
+# Скачать готовый результат
+curl -OJ http://localhost:8800/download/<job_id>
+```
+
+### Реверс‑прокси через Nginx (скелет)
+
+```
+server {
+    listen 80;
+    server_name your.api.domain;
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://127.0.0.1:8800;
+    }
+}
+```
+
+Документация FastAPI по установке, примерам и интерактивной документации: [fastapi.tiangolo.com](https://fastapi.tiangolo.com/)

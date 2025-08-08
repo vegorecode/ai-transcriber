@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WhisperX — API Docs</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; color: #222; background: #f6f8fa; }
+      header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; }
+      h1 { font-size: 1rem; margin: 0; }
+      a.button { text-decoration: none; display: inline-block; padding: .5rem .75rem; border: 1px solid #ddd; border-radius: .5rem; background: #f9f9f9; }
+      main { display: grid; place-items: start center; padding: 2rem 1rem; }
+      .container { width: min(720px, 100%); }
+      h2 { font-size: 1.1rem; margin-top: 1.5rem; }
+      code, pre { background: #f6f8fa; padding: .2rem .35rem; border-radius: .3rem; }
+      pre { padding: .75rem; overflow: auto; border: 1px solid #e5e7eb; }
+      a { color: #1f6feb; }
+      .muted { color: #6b7280; }
+      .card { border: 1px solid #e5e7eb; padding: 1rem; border-radius: .75rem; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+      ul { margin: .25rem 0 .75rem 1.25rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>WhisperX — API-обёртка</h1>
+      <nav>
+        <a class="button" href="/">Назад</a>
+      </nav>
+    </header>
+    <main>
+    <div class="container">
+    <p class="muted">Базовый URL: <code>/</code>. Все ответы JSON, если не указано иное.</p>
+
+    <div class="card">
+      <h2>POST /api/transcribe</h2>
+      <p>Создаёт задачу транскрипции. Тело: <code>multipart/form-data</code> с полем <code>file</code> (аудио/видео).</p>
+      <pre>{
+  "id": "<job_id>",
+  "status": "queued"
+}</pre>
+      <p class="muted">Далее опрашивайте <code>GET /api/jobs/&lt;job_id&gt;</code> или общий список <code>GET /api/jobs</code>.</p>
+
+      <h2>GET /api/jobs</h2>
+      <p>Список задач (последние — сверху).</p>
+      <pre>[
+  {
+    "id": "...",
+    "original_filename": "sample.mp3",
+    "status": "queued|processing|finished|failed",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:10Z",
+    "output_format": "srt",
+    "output_path": "/work/out/<id>.srt",
+    "download_name": "sample.srt",
+    "error": null
+  }
+]</pre>
+
+      <h2>GET /api/jobs/&lt;job_id&gt;</h2>
+      <p>Детали одной задачи.</p>
+
+      <h2>GET /download/&lt;job_id&gt;</h2>
+      <p>Скачивание результата, если <code>status=finished</code>. Отдаёт файл как attachment.</p>
+
+      <h2>GET /download-config/&lt;job_id&gt;</h2>
+      <p>Скачивание снэпшота настроек (TXT) рядом с транскриптом — файл <code>*_config.txt</code>.</p>
+
+      <h2>GET /api/settings</h2>
+      <p>Текущие настройки движка.</p>
+
+      <h2>POST /api/settings</h2>
+      <p>Обновление настроек. Тело JSON — подмножество полей из <code>GET /api/settings</code>.</p>
+      <pre>{
+  "language": "ru",
+  "model": "openai/whisper-large-v3",
+  "device": "cuda",
+  "compute_type": "float16",
+  "batch_size": 2,
+  "beam_size": 5,
+  "temperature": 0.0,
+  "temperature_increment_on_fallback": 0.2,
+  "vad_method": "pyannote",
+  "vad_onset": 0.30,
+  "vad_offset": 0.25,
+  "diarize": true,
+  "min_speakers": 1,
+  "max_speakers": 4,
+  "output_format": "srt",
+  "length_penalty": 1.1
+}</pre>
+    </div>
+
+    <h2>Пример: curl</h2>
+    <pre>curl -F file=@audio.mp3 http://localhost:8800/api/transcribe
+curl http://localhost:8800/api/jobs
+curl -OJ http://localhost:8800/download/&lt;job_id&gt;</pre>
+
+    <h2>Пример: JavaScript (fetch)</h2>
+    <pre>const fd = new FormData();
+fd.append('file', fileInput.files[0]);
+const job = await fetch('/api/transcribe', { method: 'POST', body: fd }).then(r => r.json());
+const detail = await fetch(`/api/jobs/${job.id}`).then(r => r.json());
+if (detail.status === 'finished') window.location.href = `/download/${job.id}`;
+    </pre>
+    </div>
+    </div>
+    </main>
+  </body>
+  </html>
+

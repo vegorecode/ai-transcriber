@@ -1,0 +1,20 @@
+FROM ghcr.io/jim60105/whisperx:latest
+
+WORKDIR /work
+
+# В образе использован venv на /venv — добавим его в PATH, чтобы видеть pip и python
+ENV PATH="/venv/bin:${PATH}"
+
+# Гарантируем наличие pip (в некоторых slim-образах pip может отсутствовать)
+RUN python3 -m ensurepip --upgrade || python -m ensurepip --upgrade || true
+
+# Устанавливаем веб-зависимости. fastapi[standard] подтянет uvicorn, jinja2, python-multipart и др.
+RUN python3 -m pip install --no-cache-dir "fastapi[standard]" anyio || pip install --no-cache-dir "fastapi[standard]" anyio
+
+# Копируем приложение (в проде можно монтировать volume, но COPY ускорит первый старт)
+COPY app /work/app
+
+EXPOSE 8800
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8800", "--workers", "1"]
+

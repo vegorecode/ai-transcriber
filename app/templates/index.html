@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WhisperX — загрузка и транскрипция</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; color: #222; background: #f6f8fa; }
+      header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; }
+      h1 { font-size: 1rem; margin: 0; }
+      a.button { text-decoration: none; display: inline-block; padding: .5rem .75rem; border: 1px solid #ddd; border-radius: .5rem; background: #f9f9f9; }
+      main { display: grid; place-items: start center; padding: 2rem 1rem; }
+      .card { position: relative; border: 1px solid #e5e7eb; padding: 1rem; border-radius: .75rem; background: #fff; width: min(720px, 100%); box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+      .row { display: flex; gap: .5rem; align-items: center; margin-bottom: .75rem; }
+      .row .field-label { min-width: 160px; }
+      /* Кастомная кнопка выбора файла */
+      #file { display: none; }
+      .upload-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px dashed #cbd5e1; border-radius: .5rem; background: #f8fafc; color: #334155; cursor: pointer; margin-left: .25rem; }
+      .upload-icon:hover { background: #f1f5f9; }
+      .upload-icon svg { width: 20px; height: 20px; }
+      input[type="file"] { padding: .5rem; }
+      button { padding: .6rem 1rem; background: #1f6feb; color: #fff; border: none; border-radius: .5rem; cursor: pointer; }
+      button.secondary { background: #eef2ff; color: #1f3b8a; border: 1px solid #c7d2fe; }
+      button:disabled { opacity: .6; cursor: not-allowed; }
+      small { color: #666; }
+      .muted { color: #6b7280; }
+
+      /* Прогресс */
+      .progress { display: none; align-items: center; gap: .5rem; margin-top: .5rem; }
+      .spinner { width: 16px; height: 16px; border: 2px solid #d1d5db; border-top-color: #1f6feb; border-radius: 50%; animation: spin 1s linear infinite; }
+      .spinner.sm { width: 12px; height: 12px; border-width: 2px; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* История */
+      details.history { margin-top: 1rem; }
+      .job { display: grid; grid-template-columns: 1fr auto auto; gap: .5rem 1.25rem; align-items: center; padding: .5rem .25rem; border-bottom: 1px solid #f0f2f5; }
+      .filename { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
+      .status { font-size: .875rem; }
+      .status.badge { padding: .2rem .5rem; border-radius: .4rem; background: #eef2ff; color: #1f3b8a; border: 1px solid #c7d2fe; }
+      .status.processing { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+      .status.failed { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+      .actions { display: inline-flex; gap: .5rem; }
+      .actions button { margin: 0; }
+      summary { cursor: default; }
+      /* Полноэкранная drop-зона */
+      .dropzone-overlay { position: absolute; inset: 0; border: 2px dashed #93c5fd; background: rgba(219, 234, 254, .6); display: none; align-items: center; justify-content: center; border-radius: .75rem; z-index: 1; }
+      .dropzone-overlay.visible { display: flex; }
+      .dropzone-overlay span { color: #1d4ed8; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>WhisperX — API-обёртка</h1>
+      <nav>
+        <a class="button" href="/settings">Настройки</a>
+        <a class="button" href="/api-docs" target="_blank">API docs</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card">
+        <form id="upload-form" enctype="multipart/form-data" onsubmit="return startTranscription(event)">
+          <div class="row">
+            <span class="field-label" style="display:inline-flex; align-items:center; gap:.5rem;">Аудио-файл
+            <label for="file" class="upload-icon" title="Выбрать файл" style="margin-left:.5rem;">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 15v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M12 3v12m0 0l-4-4m4 4l4-4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+            </label>
+            <span id="file-name" class="muted" style="margin-left:.5rem; max-width: 340px; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:middle;"></span>
+            </span>
+            <input id="file" name="file" type="file" accept="audio/*,video/*" required />
+          </div>
+          <div class="row">
+            <small class="muted">Результат будет сохранен в истории вместе с актуальным конфигом настроек.</small>
+          </div>
+          <div class="row">
+            <button id="submit-btn" type="submit" disabled class="secondary">Транскрибировать</button>
+          </div>
+          <div id="progress" class="progress">
+            <div class="spinner"></div>
+            <small id="progress-text">Транскрибация...</small>
+          </div>
+        </form>
+
+        <details id="history" class="history">
+          <summary>История</summary>
+          <div id="jobs"></div>
+          <div id="history-empty" class="muted" style="padding:.5rem 0; display:none;">История пустая...</div>
+        </details>
+      </section>
+    </main>
+
+    <script>
+      let pollTimer = null;
+      const cardEl = document.querySelector('.card');
+      const dropOverlay = document.createElement('div');
+      dropOverlay.className = 'dropzone-overlay';
+      dropOverlay.innerHTML = '<span>Перетащите файл сюда для загрузки</span>';
+      cardEl.appendChild(dropOverlay);
+
+      async function startTranscription(e) {
+        e.preventDefault();
+        const form = document.getElementById('upload-form');
+        const fileInput = document.getElementById('file');
+        const submitBtn = document.getElementById('submit-btn');
+        if (!fileInput.files.length) return false;
+
+        const fd = new FormData();
+        fd.append('file', fileInput.files[0]);
+
+        setProgress(true);
+        // Развернуть историю
+        const hist = document.getElementById('history');
+        hist.open = true;
+
+        try {
+          const res = await fetch('/api/transcribe', { method: 'POST', body: fd });
+          if (!res.ok) throw new Error('Upload failed');
+          const data = await res.json();
+          await refreshJobs();
+          startPolling();
+        } catch (err) {
+          console.error(err);
+          alert('Не удалось отправить файл');
+        } finally {
+          fileInput.value = '';
+          document.getElementById('file-name').textContent = '';
+          submitBtn.disabled = true;
+          submitBtn.classList.add('secondary');
+        }
+        return false;
+      }
+
+      function setProgress(visible) {
+        document.getElementById('progress').style.display = visible ? 'flex' : 'none';
+      }
+
+      async function refreshJobs() {
+        const res = await fetch('/api/jobs');
+        if (!res.ok) return;
+        const jobs = await res.json();
+        const container = document.getElementById('jobs');
+        container.innerHTML = '';
+        // Плейсхолдер пустой истории
+        const empty = document.getElementById('history-empty');
+        empty.style.display = jobs.length ? 'none' : 'block';
+        for (const job of jobs) {
+          const row = document.createElement('div');
+          row.className = 'job';
+
+          const name = document.createElement('div');
+          name.className = 'filename';
+          name.title = job.original_filename || '';
+          name.textContent = job.original_filename || '(без имени)';
+
+          const status = document.createElement('div');
+          if (job.status === 'failed') {
+            status.className = 'status badge failed';
+            status.innerHTML = 'Ошибка';
+          } else {
+            status.style.display = 'none';
+          }
+
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+          const delBtn = document.createElement('button');
+          delBtn.title = 'Удалить из истории';
+          delBtn.style.background = '#ef4444';
+          delBtn.style.border = '1px solid #dc2626';
+          delBtn.style.color = '#fff';
+          delBtn.style.width = '42px';
+          delBtn.style.display = 'inline-flex';
+          delBtn.style.alignItems = 'center';
+          delBtn.style.justifyContent = 'center';
+          delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M3 6h18" stroke="currentColor" stroke-width="2.0"/><path d="M8 6v-2a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2.0" fill="none"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" stroke-width="2.0" fill="none"/></svg>';
+          delBtn.disabled = job.status === 'processing' || job.status === 'queued';
+          delBtn.onclick = async () => {
+            if (!confirm('Удалить задачу и связанные файлы?')) return;
+            const resp = await fetch(`/api/jobs/${job.id}`, { method: 'DELETE' });
+            if (resp.ok) {
+              // Мгновенно удалить строку из DOM для визуального эффекта
+              row.remove();
+              // Дополнительно обновим список
+              await refreshJobs();
+            } else {
+              alert('Не удалось удалить задачу');
+            }
+          };
+          actions.appendChild(delBtn);
+          const configBtn = document.createElement('button');
+          configBtn.textContent = 'Конфиг';
+          configBtn.disabled = job.status !== 'finished';
+          configBtn.onclick = () => { window.location.href = `/download-config/${job.id}`; };
+          actions.appendChild(configBtn);
+
+          const btn = document.createElement('button');
+          btn.textContent = 'Скачать';
+          btn.disabled = job.status !== 'finished';
+          btn.onclick = () => { window.location.href = `/download/${job.id}`; };
+          actions.appendChild(btn);
+
+          // Приводим высоту кнопок истории к высоте кнопки "Транскрибировать"
+          const submitBtn = document.getElementById('submit-btn');
+          if (submitBtn) {
+            const h = window.getComputedStyle(submitBtn).height;
+            delBtn.style.height = h;
+            configBtn.style.height = h;
+            btn.style.height = h;
+          }
+
+          row.appendChild(name);
+          row.appendChild(status);
+          row.appendChild(actions);
+          container.appendChild(row);
+        }
+
+        // Управление глобальным прогрессом
+        const hasActive = jobs.some(j => j.status === 'queued' || j.status === 'processing');
+        setProgress(hasActive);
+        if (!hasActive) stopPolling();
+      }
+
+      function startPolling() {
+        if (pollTimer) return;
+        pollTimer = setInterval(refreshJobs, 1500);
+      }
+      function stopPolling() {
+        if (!pollTimer) return;
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+
+
+      // Первый заход
+      refreshJobs();
+      // Управление доступностью кнопки отправки
+      (function(){
+        const fileInput = document.getElementById('file');
+        const submitBtn = document.getElementById('submit-btn');
+        const fileNameEl = document.getElementById('file-name');
+        const updateState = () => {
+          const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+          fileNameEl.textContent = hasFile ? fileInput.files[0].name : '';
+          submitBtn.disabled = !hasFile;
+          if (hasFile) {
+            submitBtn.classList.remove('secondary');
+          } else {
+            submitBtn.classList.add('secondary');
+          }
+        };
+        fileInput.addEventListener('change', updateState);
+        updateState();
+      })();
+
+      // Drag & Drop на всю центральную карточку
+      ;(function(){
+        const fileInput = document.getElementById('file');
+        const submitBtn = document.getElementById('submit-btn');
+        const overlay = document.querySelector('.dropzone-overlay');
+        const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
+        ['dragenter','dragover','dragleave','drop'].forEach(ev => {
+          document.addEventListener(ev, prevent);
+        });
+        ['dragenter','dragover'].forEach(ev => {
+          document.addEventListener(ev, () => overlay.classList.add('visible'));
+        });
+        ['dragleave','drop'].forEach(ev => {
+          document.addEventListener(ev, () => overlay.classList.remove('visible'));
+        });
+        document.addEventListener('drop', (e) => {
+          const dt = e.dataTransfer;
+          if (!dt || !dt.files || !dt.files.length) return;
+          fileInput.files = dt.files;
+          const evt = new Event('change');
+          fileInput.dispatchEvent(evt);
+        });
+      })();
+    </script>
+  </body>
+  </html>
+

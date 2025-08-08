@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WhisperX — настройки</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; color: #222; background: #f6f8fa; }
+      header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; }
+      h1 { font-size: 1rem; margin: 0; }
+      a.button { text-decoration: none; display: inline-block; padding: .5rem .75rem; border: 1px solid #ddd; border-radius: .5rem; background: #f9f9f9; }
+      main { display: grid; place-items: start center; padding: 2rem 1rem; }
+      form { border: 1px solid #eee; padding: 1rem; border-radius: .75rem; background: #fff; max-width: 720px; width: min(720px, 100%); box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+      .grid { display: grid; grid-template-columns: 200px 1fr; gap: .5rem 1rem; align-items: center; }
+      label { color: #333; }
+      /* Унифицируем ширину полей */
+      :root { --settings-field-width: 360px; }
+      input, select { padding: .35rem .5rem; border: 1px solid #ddd; border-radius: .4rem; width: var(--settings-field-width); max-width: var(--settings-field-width); }
+      select { width: var(--settings-field-width); max-width: var(--settings-field-width); }
+      .actions { margin-top: 1rem; }
+      button { padding: .6rem 1rem; background: #1f6feb; color: #fff; border: none; border-radius: .5rem; cursor: pointer; }
+      small { color: #666; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>WhisperX — API-обёртка</h1>
+      <nav>
+        <a class="button" href="/">Назад</a>
+        <a class="button" href="/api-docs" target="_blank">API docs</a>
+      </nav>
+    </header>
+
+    <main>
+    <form method="post" action="/settings">
+      <div class="grid">
+        <label>Язык (LANGUAGE)</label>
+        <input name="language" type="text" value="{{ settings.language|e }}" />
+
+        <label>Модель (MODEL)</label>
+        <input name="model" type="text" value="{{ settings.model|e }}" />
+
+        <label>Устройство (DEVICE)</label>
+        <select name="device">
+          <option value="cuda" {% if settings.device == 'cuda' %}selected{% endif %}>CUDA (GPU)</option>
+          <option value="cpu" {% if settings.device == 'cpu' %}selected{% endif %}>CPU</option>
+        </select>
+
+        <label>Тип вычислений (COMPUTE_TYPE)</label>
+        <select name="compute_type">
+          <option value="float16" {% if settings.compute_type == 'float16' %}selected{% endif %}>float16</option>
+          <option value="int8" {% if settings.compute_type == 'int8' %}selected{% endif %}>int8</option>
+          <option value="float32" {% if settings.compute_type == 'float32' %}selected{% endif %}>float32</option>
+        </select>
+
+        <label>Batch size</label>
+        <input name="batch_size" type="number" min="1" value="{{ settings.batch_size }}" />
+
+        <label>Beam size</label>
+        <input name="beam_size" type="number" min="1" value="{{ settings.beam_size }}" />
+
+        <label>Temperature</label>
+        <input name="temperature" type="number" step="0.05" min="0" max="1" value="{{ settings.temperature }}" />
+
+        <label>Temp. increment on fallback</label>
+        <input name="temperature_increment_on_fallback" type="number" step="0.05" min="0" max="1" value="{{ settings.temperature_increment_on_fallback }}" />
+
+        <label>VAD метод</label>
+        <select name="vad_method">
+          <option value="pyannote" {% if settings.vad_method == 'pyannote' %}selected{% endif %}>pyannote (точнее)</option>
+          <option value="silero" {% if settings.vad_method == 'silero' %}selected{% endif %}>silero (быстрее)</option>
+        </select>
+
+        <label>VAD onset</label>
+        <input name="vad_onset" type="number" step="0.01" min="0" max="1" value="{{ settings.vad_onset }}" />
+
+        <label>VAD offset</label>
+        <input name="vad_offset" type="number" step="0.01" min="0" max="1" value="{{ settings.vad_offset }}" />
+
+        <label>Диаризация</label>
+        <select name="diarize">
+          <option value="true" {% if settings.diarize %}selected{% endif %}>Включена</option>
+          <option value="false" {% if not settings.diarize %}selected{% endif %}>Отключена</option>
+        </select>
+
+        <label>Min speakers</label>
+        <input name="min_speakers" type="number" min="1" value="{{ settings.min_speakers }}" />
+
+        <label>Max speakers</label>
+        <input name="max_speakers" type="number" min="1" value="{{ settings.max_speakers }}" />
+
+        <label>Формат вывода</label>
+        <select name="output_format">
+          <option value="srt" {% if settings.output_format == 'srt' %}selected{% endif %}>srt</option>
+          <option value="vtt" {% if settings.output_format == 'vtt' %}selected{% endif %}>vtt</option>
+          <option value="txt" {% if settings.output_format == 'txt' %}selected{% endif %}>txt</option>
+          <option value="json" {% if settings.output_format == 'json' %}selected{% endif %}>json</option>
+        </select>
+
+        <label>Length penalty</label>
+        <input name="length_penalty" type="number" step="0.1" min="0" max="5" value="{{ settings.length_penalty }}" />
+      </div>
+
+      <div class="actions">
+        <button type="submit">Сохранить</button>
+        <small>Настройки сохраняются в контейнере и применяются для новых транскрипций.</small>
+      </div>
+    </form>
+    </main>
+
+  </body>
+  </html>
+
