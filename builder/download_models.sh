@@ -68,9 +68,6 @@ except Exception as e:
     print('No secret file found, falling back to environment variable:', e)
     hf_token = os.environ.get('HF_TOKEN')
 
-# Download SpeechBrain speaker recognition model
-snapshot_download(repo_id='speechbrain/spkrec-ecapa-voxceleb')
-
 # Optionally download PyAnnote models if HF_TOKEN is set (requires EULA acceptance)
 if hf_token:
     snapshot_download(repo_id='pyannote/embedding', token=hf_token)

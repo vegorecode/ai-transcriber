@@ -1,0 +1,63 @@
+# 1) CUDA 12.2 + cuDNN 8, Ubuntu 22.04
+FROM nvidia/cuda:12.2.2-cudnn8-devel-ubuntu22.04
+
+SHELL ["/bin/bash", "-c"]
+WORKDIR /app
+
+# 2) Системные зависимости
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3.11-dev python3.11-distutils python3-pip \
+    ffmpeg git ca-certificates wget libsndfile1 && \
+    rm -rf /var/lib/apt/lists/*
+
+# (опционально) alias python -> python3.11
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python
+
+ENV HF_HOME=/root/.cache/huggingface \
+    TRANSFORMERS_CACHE=/root/.cache/huggingface \
+    TORCH_HOME=/root/.cache/torch \
+    CT2_USE_EXPERIMENTAL_PACKED_GEMM=1 \
+    HF_HUB_ENABLE_HF_TRANSFER=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_PREFER_BINARY=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    TRANSFORMERS_NO_TORCHVISION=1
+
+# 3) pip bootstrap
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+# 4) Ставим согласованный стек PyTorch (CUDA 12.1 колёса) — совместим с базой 12.2
+#    ВАЖНО: используем --index-url на cu121 (не cu124!)
+RUN python3 -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu121 \
+    torch==2.3.1 torchaudio==2.3.1
+
+# 5) Остальные зависимости
+COPY builder/requirements.txt /builder/requirements.txt
+# В requirements.txt должны быть ПИНЫ:
+#   whisperx==3.4.2
+#   faster-whisper==1.2.0
+#   ctranslate2==4.4.0
+#   pyannote.audio==3.3.2
+RUN python3 -m pip install --no-cache-dir -r /builder/requirements.txt
+
+# 6) Быстрые проверки
+RUN python3 - <<'PY'
+import torch, torchaudio, importlib
+print("torch", torch.__version__, "CUDA:", torch.version.cuda)
+print("torchaudio", torchaudio.__version__)
+print("cuDNN version:", torch.backends.cudnn.version())
+assert str(torch.backends.cudnn.version()).startswith("8"), "cuDNN must be v8.x"
+import ctranslate2
+print("ctranslate2", ctranslate2.__version__)
+PY
+
+# 7) sanity-check pyannote pipeline импорт
+RUN python3 - <<'PY'
+from pyannote.audio import Pipeline
+print("pyannote.audio.Pipeline import OK")
+PY
+
+# 8) Предзагрузка моделей (если нужно)
+COPY builder /builder
+RUN chmod +x /builder/download_models.sh && sed -i 's/\r$//' /builder/download_models.sh
+RUN --mount=type=secret,id=hf_token bash /builder/download_models.sh

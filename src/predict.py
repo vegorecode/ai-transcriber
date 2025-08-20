@@ -8,10 +8,12 @@ import tempfile
 import time
 from typing import Any
 
+# Отключаем автоподтягивание torchvision внутри transformers до импорта whisperx
+os.environ.setdefault("TRANSFORMERS_NO_TORCHVISION", "1")
+
 import torch
 import whisperx
 from pydub import AudioSegment
-from scipy.spatial.distance import cosine
 from whisperx.audio import N_SAMPLES, log_mel_spectrogram
 
 from cog_stub import BaseModel, BasePredictor, Input, Path
@@ -36,9 +38,7 @@ logger.addHandler(file_handler)
 
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
-compute_type = (
-    "float16"  # можно сменить на "int8" при дефиците GPU‑памяти (точность снизится)
-)
+compute_type = "float16"
 device = "cuda"
 whisper_arch = "./models/faster-whisper-large-v3-russian"
 
@@ -78,10 +78,6 @@ class Predictor(BasePredictor):
             description="ISO‑код языка аудио; укажите None, чтобы определить язык автоматически",
             default=None,
         ),
-        device: str = Input(description="Устройство: 'cuda' или 'cpu'", default="cuda"),
-        device_index: int = Input(
-            description="Индекс CUDA‑GPU (опционально)", default=None
-        ),
         compute_type: str = Input(
             description="Тип вычислений WhisperX (например, float16, int8)",
             default="float16",
@@ -94,10 +90,7 @@ class Predictor(BasePredictor):
             description="Максимум попыток для итеративного детекта языка; если достигнут лимит, берётся наиболее вероятный",
             default=5,
         ),
-        initial_prompt: str = Input(
-            description="Необязательный подсказочный текст для первого окна транскрипции",
-            default=None,
-        ),
+        # initial_prompt удалён из публичного API (упрощение интерфейса)
         batch_size: int = Input(
             description="Параллелизм при транскрипции входного аудио", default=64
         ),
@@ -145,21 +138,11 @@ class Predictor(BasePredictor):
             description="Печатать времена вычислений/инференса и потребление памяти",
             default=False,
         ),
-        speaker_verification: bool = Input(
-            description="Включить верификацию спикеров", default=False
-        ),
-        speaker_samples: list = Input(
-            description="Список образцов голоса для верификации. Каждый элемент: dict с 'url' и опциональными 'name'/'file_path'. Если name не указан — берётся имя файла.",
-            default=[],
-        ),
     ) -> Output:
         with torch.inference_mode():
-            # Вычисляем устройство с учётом индекса
-            runtime_device = (
-                device
-                if device != "cuda" or device_index is None
-                else f"cuda:{device_index}"
-            )
+            # Только GPU: первая CUDA‑карта
+            runtime_device = "cuda"
+            runtime_device_index = 0
             # Сохраняем устройство в глобальной переменной для align/diarize
             globals()["device"] = runtime_device
             # Выбираем модель: локальная папка в /models или идентификатор
@@ -174,7 +157,6 @@ class Predictor(BasePredictor):
             globals()["compute_type"] = compute_type
             asr_options = {
                 "temperatures": [temperature],
-                "initial_prompt": initial_prompt,
                 # Жёстко заданные пороги, не приходят извне
                 "no_speech_threshold": NO_SPEECH_THRESHOLD,
                 "log_prob_threshold": LOGPROB_THRESHOLD,
@@ -240,7 +222,8 @@ class Predictor(BasePredictor):
 
             model = whisperx.load_model(
                 model_path,
-                runtime_device,
+                device=runtime_device,
+                device_index=runtime_device_index,
                 compute_type=compute_type,
                 language=language,
                 asr_options=asr_options,
@@ -291,12 +274,13 @@ class Predictor(BasePredictor):
             if diarization:
                 if huggingface_access_token:
                     result = run_diarization(
-                        audio,
+                        audio_file,
                         result,
                         debug,
                         huggingface_access_token,
                         min_speakers,
                         max_speakers,
+                        runtime_device,
                     )
                 else:
                     logger.info(
@@ -328,7 +312,8 @@ def detect_language(
 ):
     model = whisperx.load_model(
         whisper_arch,
-        device,
+        device="cuda",
+        device_index=0,
         compute_type=compute_type,
         asr_options=asr_options,
         vad_options=vad_options,
@@ -435,14 +420,14 @@ def align(audio, result, debug):
     start_time = time.time_ns() / 1e6
 
     model_a, metadata = whisperx.load_align_model(
-        language_code=result["language"], device=device
+        language_code=result["language"], device="cuda"
     )
     result = whisperx.align(
         result["segments"],
         model_a,
         metadata,
         audio,
-        device,
+        "cuda",
         return_char_alignments=False,
     )
 
@@ -458,22 +443,28 @@ def align(audio, result, debug):
 
 
 def run_diarization(
-    audio,
+    audio_file,
     result,
     debug,
     huggingface_access_token,
     min_speakers,
     max_speakers,
+    runtime_device,
 ):
     start_time = time.time_ns() / 1e6
 
-    diarize_model = whisperx.DiarizationPipeline(
+    # Обёртка WhisperX над pyannote — рекомендуемый путь
+    diarize_model = whisperx.diarize.DiarizationPipeline(
         model_name="pyannote/speaker-diarization-3.1",
         use_auth_token=huggingface_access_token,
-        device=device,
+        device="cuda",
     )
+
+    # Передаём путь к файлу (строкой) — пайплайн сам загрузит аудио
     diarize_segments = diarize_model(
-        audio, min_speakers=min_speakers, max_speakers=max_speakers
+        str(audio_file),
+        min_speakers=min_speakers,
+        max_speakers=max_speakers,
     )
 
     result = whisperx.assign_word_speakers(diarize_segments, result)
@@ -487,22 +478,3 @@ def run_diarization(
     del diarize_model
 
     return result
-
-
-def identify_speaker_for_segment(segment_embedding, known_embeddings, threshold=0.1):
-    """
-    Compare segment_embedding to known speaker embeddings using cosine similarity.
-    Returns the speaker name with the highest similarity above the threshold,
-    or "Unknown" if none match.
-    """
-    best_match = "Unknown"
-    best_similarity = -1
-    for speaker, known_emb in known_embeddings.items():
-        similarity = 1 - cosine(segment_embedding, known_emb)
-        if similarity > best_similarity:
-            best_similarity = similarity
-            best_match = speaker
-    if best_similarity >= threshold:
-        return best_match, best_similarity
-    else:
-        return "Unknown", best_similarity
