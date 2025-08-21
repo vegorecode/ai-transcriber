@@ -1,5 +1,4 @@
-# 1) CUDA 12.2 + cuDNN 8, Ubuntu 22.04
-FROM nvidia/cuda:12.2.2-cudnn8-devel-ubuntu22.04
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime AS base
 
 SHELL ["/bin/bash", "-c"]
 WORKDIR /app
@@ -26,19 +25,31 @@ ENV HF_HOME=/root/.cache/huggingface \
 # 3) pip bootstrap
 RUN python3 -m pip install --upgrade pip setuptools wheel
 
-# 4) Ставим согласованный стек PyTorch (CUDA 12.1 колёса) — совместим с базой 12.2
-#    ВАЖНО: используем --index-url на cu121 (не cu124!)
-RUN python3 -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu121 \
-    torch==2.3.1 torchaudio==2.3.1
-
 # 5) Остальные зависимости
 COPY builder/requirements.txt /builder/requirements.txt
-# В requirements.txt должны быть ПИНЫ:
-#   whisperx==3.4.2
-#   faster-whisper==1.2.0
-#   ctranslate2==4.4.0
-#   pyannote.audio==3.3.2
 RUN python3 -m pip install --no-cache-dir -r /builder/requirements.txt
+
+RUN python -m pip install --no-cache-dir "nvidia-cudnn-cu12==9.7.1.26" \
+ && python - <<'PY'
+import pathlib, nvidia.cudnn as m
+libdir = (pathlib.Path(m.__file__).parent / "lib").resolve()
+path = "/etc/ld.so.conf.d/cudnn.conf"
+open(path, "w").write(str(libdir) + "\n")
+print("cuDNN lib dir:", libdir)
+PY
+# обновляем кэш динамического загрузчика, чтобы *.so находились без LD_LIBRARY_PATH
+RUN ldconfig
+
+RUN python3 - <<'PY'
+import os, ctypes
+print("LD_LIBRARY_PATH=", os.environ.get("LD_LIBRARY_PATH"))
+for lib in ("libcudnn.so.9","libcudnn_cnn.so.9","libcudnn_ops.so.9"):
+    ctypes.CDLL(lib)
+print("cuDNN 9 core/cnn/ops — OK")
+import ctranslate2, torch
+print("torch", torch.__version__, "ctranslate2", ctranslate2.__version__)
+PY
+
 
 # 6) Быстрые проверки
 RUN python3 - <<'PY'
@@ -46,7 +57,7 @@ import torch, torchaudio, importlib
 print("torch", torch.__version__, "CUDA:", torch.version.cuda)
 print("torchaudio", torchaudio.__version__)
 print("cuDNN version:", torch.backends.cudnn.version())
-assert str(torch.backends.cudnn.version()).startswith("8"), "cuDNN must be v8.x"
+assert str(torch.backends.cudnn.version()).startswith("9"), "cuDNN must be v9.x"
 import ctranslate2
 print("ctranslate2", ctranslate2.__version__)
 PY

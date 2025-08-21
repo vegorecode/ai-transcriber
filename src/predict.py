@@ -14,7 +14,6 @@ os.environ.setdefault("TRANSFORMERS_NO_TORCHVISION", "1")
 import torch
 import whisperx
 from pydub import AudioSegment
-from whisperx.audio import N_SAMPLES, log_mel_spectrogram
 
 from cog_stub import BaseModel, BasePredictor, Input, Path
 
@@ -308,8 +307,13 @@ def detect_language(
     language_detection_max_tries,
     asr_options,
     vad_options,
-    iteration=1,
 ):
+    """Определение языка по нескольким 30‑сек. сегментам без обращения к приватным API.
+
+    Для каждого сегмента выполняется быстрый transcribe (batch_size=1). Язык выбирается
+    по большинству голосов; probability — доля голосов за победивший язык.
+    """
+
     model = whisperx.load_model(
         whisper_arch,
         device="cuda",
@@ -319,64 +323,57 @@ def detect_language(
         vad_options=vad_options,
     )
 
-    start_ms = segments_starts[iteration - 1]
+    votes = {}
+    total = 0
+    winner = None
+    winner_ratio = 0.0
+    iterations_done = 0
 
-    audio_segment_file_path = extract_audio_segment(
-        full_audio_file_path, start_ms, 30000
-    )
+    max_iters = min(language_detection_max_tries, len(segments_starts))
 
-    audio = whisperx.load_audio(audio_segment_file_path)
+    for idx in range(max_iters):
+        start_ms = segments_starts[idx]
+        audio_segment_file_path = extract_audio_segment(
+            full_audio_file_path, start_ms, 30000
+        )
+        try:
+            audio = whisperx.load_audio(audio_segment_file_path)
+            result = model.transcribe(audio, batch_size=1)
+            lang = result.get("language")
+        finally:
+            try:
+                audio_segment_file_path.unlink()
+            except Exception:
+                pass
 
-    model_n_mels = model.model.feat_kwargs.get("feature_size")
-    segment = log_mel_spectrogram(
-        audio[:N_SAMPLES],
-        n_mels=model_n_mels if model_n_mels is not None else 80,
-        padding=0 if audio.shape[0] >= N_SAMPLES else N_SAMPLES - audio.shape[0],
-    )
-    encoder_output = model.model.encode(segment)
-    results = model.model.model.detect_language(encoder_output)
-    language_token, language_probability = results[0][0]
-    language = language_token[2:-2]
+        total += 1
+        if lang:
+            votes[lang] = votes.get(lang, 0) + 1
+            ratio = votes[lang] / total
+            if ratio >= winner_ratio:
+                winner = lang
+                winner_ratio = ratio
 
-    logger.info(
-        "Итерация %s — язык: %s (%.2f)", iteration, language, language_probability
-    )
+            logger.info("Итерация %s — язык: %s (freq=%.2f)", idx + 1, lang, ratio)
 
-    audio_segment_file_path.unlink()
+            iterations_done = idx + 1
+
+            if language_detection_min_prob > 0 and ratio >= language_detection_min_prob:
+                break
+
+    if not winner and votes:
+        winner = max(votes, key=votes.get)
+        winner_ratio = votes[winner] / max(1, total)
 
     gc.collect()
     torch.cuda.empty_cache()
     del model
 
-    detected_language = {
-        "language": language,
-        "probability": language_probability,
-        "iterations": iteration,
+    return {
+        "language": winner or "unknown",
+        "probability": float(winner_ratio),
+        "iterations": iterations_done or total,
     }
-
-    if (
-        language_probability >= language_detection_min_prob
-        or iteration >= language_detection_max_tries
-    ):
-        return detected_language
-
-    next_iteration_detected_language = detect_language(
-        full_audio_file_path,
-        segments_starts,
-        language_detection_min_prob,
-        language_detection_max_tries,
-        asr_options,
-        vad_options,
-        iteration + 1,
-    )
-
-    if (
-        next_iteration_detected_language["probability"]
-        > detected_language["probability"]
-    ):
-        return next_iteration_detected_language
-
-    return detected_language
 
 
 def extract_audio_segment(input_file_path, start_time_ms, duration_ms):

@@ -202,14 +202,13 @@ def run(job):
         "audio_file": audio_file_path,
         "model": job_input.get("model", "faster-whisper-large-v3-russian"),
         "language": job_input.get("language"),
-        # Только GPU: фиксируем cuda:0
         "compute_type": job_input.get("compute_type", "float16"),
         "language_detection_min_prob": job_input.get("language_detection_min_prob", 0),
         "language_detection_max_tries": job_input.get(
             "language_detection_max_tries", 5
         ),
-        "batch_size": job_input.get("batch_size", 64),
-        "beam_size": job_input.get("beam_size"),
+        "batch_size": job_input.get("batch_size", 16),
+        "beam_size": job_input.get("beam_size", 5),
         "temperature": job_input.get("temperature", 0),
         "temperature_increment_on_fallback": job_input.get(
             "temperature_increment_on_fallback"
