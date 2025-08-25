@@ -163,6 +163,22 @@ def _merge_with_defaults(raw_input: dict) -> dict:
     return normalized
 
 
+def _mask_token(value: str | None) -> str | None:
+    """Маскирует секреты в логах/ответе (оставляет префикс/суффикс).
+
+    Пример: hf_abcde12345 → hf_a…2345
+    """
+    if not value:
+        return value
+    try:
+        v = value.strip()
+        if len(v) <= 8:
+            return "****"
+        return f"{v[:4]}…{v[-4:]}"
+    except Exception:
+        return "****"
+
+
 def _parse_env_float(*env_names: str):
     """Вернуть первое найденное значение float из переменных окружения.
 
@@ -177,6 +193,98 @@ def _parse_env_float(*env_names: str):
                 # игнорируем некорректные значения
                 pass
     return None
+
+
+def _parse_env_typed(expected_type, *env_names: str):
+    """Вернуть первое найденное значение ожидаемого типа из ENV.
+
+    Поддерживаются типы: str, int, float, bool.
+    Для bool распознаются: 1/0, true/false, yes/no, on/off (регистр не важен).
+    Пустые строки игнорируются.
+    """
+    for name in env_names:
+        raw = os.getenv(name)
+        if raw is None:
+            continue
+        value = raw.strip()
+        if value == "":
+            continue
+        try:
+            if expected_type is bool:
+                low = value.lower()
+                if low in ("1", "true", "yes", "on"):
+                    return True
+                if low in ("0", "false", "no", "off"):
+                    return False
+                # не распознали — продолжаем искать дальше
+                continue
+            if expected_type is int:
+                return int(value)
+            if expected_type is float:
+                return float(value)
+            if expected_type is str:
+                return value
+        except Exception:
+            # некорректное значение — пробуем следующий алиас
+            continue
+    return None
+
+
+# Карта ENV-алиасов для основных параметров
+ENV_NAME_ALIASES = {
+    # Базовые параметры (без вендорных префиксов)
+    "model": ("MODEL",),
+    # Специально НЕ используем системную переменную LANGUAGE, чтобы избежать конфликтов
+    "language": (),
+    "compute_type": ("COMPUTE_TYPE",),
+    "language_detection_min_prob": ("LANGUAGE_DETECTION_MIN_PROB",),
+    "language_detection_max_tries": ("LANGUAGE_DETECTION_MAX_TRIES",),
+    "batch_size": ("BATCH_SIZE",),
+    "beam_size": ("BEAM_SIZE",),
+    "temperature": ("TEMPERATURE",),
+    "temperature_increment_on_fallback": ("TEMPERATURE_INCREMENT_ON_FALLBACK",),
+    # VAD
+    "vad_onset": ("VAD_ONSET",),
+    "vad_offset": ("VAD_OFFSET",),
+    "min_duration_on": ("MIN_DURATION_ON",),
+    "min_duration_off": ("MIN_DURATION_OFF",),
+    "pad_onset": ("PAD_ONSET",),
+    "pad_offset": ("PAD_OFFSET",),
+    # Вывод/режимы
+    "align_output": ("ALIGN_OUTPUT",),
+    "output_format": ("OUTPUT_FORMAT",),
+    # Диаризация и токен
+    "diarization": ("DIARIZATION",),
+    "diarize": ("DIARIZE",),
+    "huggingface_access_token": ("HUGGINGFACE_ACCESS_TOKEN", "HF_TOKEN"),
+    "min_speakers": ("MIN_SPEAKERS",),
+    "max_speakers": ("MAX_SPEAKERS",),
+    # Алгоритмические настройки
+    "length_penalty": ("LENGTH_PENALTY",),
+    "no_speech_threshold": ("NO_SPEECH_THRESHOLD",),
+    # Совместимость с прежним именованием без подчёркивания (LOGPROB)
+    "log_prob_threshold": ("LOG_PROB_THRESHOLD", "LOGPROB_THRESHOLD"),
+    "compression_ratio_threshold": ("COMPRESSION_RATIO_THRESHOLD",),
+    "debug": ("DEBUG",),
+}
+
+
+def _get_effective_value(key: str, spec: dict, job_input: dict, normalized_input: dict):
+    """Вернуть значение параметра с приоритетом: запрос → ENV → дефолт.
+
+    - Если ключ присутствует в исходном запросе (даже если значение None),
+      используем его (через normalized_input).
+    - Иначе пробуем прочитать из ENV по алиасам и привести к нужному типу.
+    - Иначе берём значение из normalized_input (дефолт из схемы).
+    """
+    if key in job_input:
+        return normalized_input.get(key)
+    env_aliases = ENV_NAME_ALIASES.get(key, ())
+    expected_type = spec.get("type", str)
+    env_value = _parse_env_typed(expected_type, *env_aliases)
+    if env_value is not None:
+        return env_value
+    return normalized_input.get(key)
 
 
 def run(job):
@@ -246,72 +354,63 @@ def run(job):
         return {"error": f"download audio: {e}"}
 
     # ------------- 3) запуск WhisperX / VAD / диаризации ------------
-    # Значения порогов с учётом приоритета: запрос → ENV → дефолт
-    _no_speech_value = (
-        normalized_input.get("no_speech_threshold")
-        if "no_speech_threshold" in job_input
-        else (
-            _parse_env_float("NO_SPEECH_THRESHOLD", "ASR_NO_SPEECH_THRESHOLD")
-            or normalized_input.get("no_speech_threshold")
+    # Собираем effective‑значения для всех параметров (кроме audio_file)
+    effective_input = {}
+    for key, spec in INPUT_VALIDATIONS.items():
+        if key == "audio_file":
+            continue
+        effective_input[key] = _get_effective_value(
+            key, spec, job_input, normalized_input
         )
-    )
-    _log_prob_value = (
-        normalized_input.get("log_prob_threshold")
-        if "log_prob_threshold" in job_input
-        else (
-            _parse_env_float("LOGPROB_THRESHOLD", "ASR_LOGPROB_THRESHOLD")
-            or normalized_input.get("log_prob_threshold")
-        )
-    )
-    _compression_ratio_value = (
-        normalized_input.get("compression_ratio_threshold")
-        if "compression_ratio_threshold" in job_input
-        else (
-            _parse_env_float(
-                "COMPRESSION_RATIO_THRESHOLD", "ASR_COMPRESSION_RATIO_THRESHOLD"
-            )
-            or normalized_input.get("compression_ratio_threshold")
-        )
-    )
 
     predict_input = {
         "audio_file": audio_file_path,
-        "model": normalized_input.get("model"),
-        "language": normalized_input.get("language"),
-        "compute_type": normalized_input.get("compute_type"),
-        "language_detection_min_prob": normalized_input.get(
+        "model": effective_input.get("model"),
+        "language": effective_input.get("language"),
+        "compute_type": effective_input.get("compute_type"),
+        "language_detection_min_prob": effective_input.get(
             "language_detection_min_prob"
         ),
-        "language_detection_max_tries": normalized_input.get(
+        "language_detection_max_tries": effective_input.get(
             "language_detection_max_tries"
         ),
-        "batch_size": normalized_input.get("batch_size"),
-        "beam_size": normalized_input.get("beam_size"),
-        "temperature": normalized_input.get("temperature"),
-        "temperature_increment_on_fallback": normalized_input.get(
+        "batch_size": effective_input.get("batch_size"),
+        "beam_size": effective_input.get("beam_size"),
+        "temperature": effective_input.get("temperature"),
+        "temperature_increment_on_fallback": effective_input.get(
             "temperature_increment_on_fallback"
         ),
-        "vad_onset": normalized_input.get("vad_onset"),
-        "vad_offset": normalized_input.get("vad_offset"),
-        "min_duration_on": normalized_input.get("min_duration_on"),
-        "min_duration_off": normalized_input.get("min_duration_off"),
-        "pad_onset": normalized_input.get("pad_onset"),
-        "pad_offset": normalized_input.get("pad_offset"),
-        "align_output": normalized_input.get("align_output"),
-        "diarization": normalized_input.get("diarization"),
-        "diarize": normalized_input.get("diarize"),
-        # токен: сначала из входа, иначе из ENV (hf_token загружен выше)
-        "huggingface_access_token": normalized_input.get("huggingface_access_token")
-        or hf_token,
-        "min_speakers": normalized_input.get("min_speakers"),
-        "max_speakers": normalized_input.get("max_speakers"),
-        "length_penalty": normalized_input.get("length_penalty"),
-        "no_speech_threshold": _no_speech_value,
-        "log_prob_threshold": _log_prob_value,
-        "compression_ratio_threshold": _compression_ratio_value,
-        "output_format": normalized_input.get("output_format"),
-        "debug": normalized_input.get("debug"),
+        "vad_onset": effective_input.get("vad_onset"),
+        "vad_offset": effective_input.get("vad_offset"),
+        "min_duration_on": effective_input.get("min_duration_on"),
+        "min_duration_off": effective_input.get("min_duration_off"),
+        "pad_onset": effective_input.get("pad_onset"),
+        "pad_offset": effective_input.get("pad_offset"),
+        "align_output": effective_input.get("align_output"),
+        "diarization": effective_input.get("diarization"),
+        "diarize": effective_input.get("diarize"),
+        "huggingface_access_token": effective_input.get("huggingface_access_token"),
+        "min_speakers": effective_input.get("min_speakers"),
+        "max_speakers": effective_input.get("max_speakers"),
+        "length_penalty": effective_input.get("length_penalty"),
+        "no_speech_threshold": effective_input.get("no_speech_threshold"),
+        "log_prob_threshold": effective_input.get("log_prob_threshold"),
+        "compression_ratio_threshold": effective_input.get(
+            "compression_ratio_threshold"
+        ),
+        "output_format": effective_input.get("output_format"),
+        "debug": effective_input.get("debug"),
     }
+
+    # Логируем эффективные параметры (с маскировкой токена)
+    try:
+        sanitized_for_log = dict(predict_input)
+        token_val = sanitized_for_log.get("huggingface_access_token")
+        if token_val:
+            sanitized_for_log["huggingface_access_token"] = _mask_token(token_val)
+        logger.debug("Effective input (sanitized): %s", sanitized_for_log)
+    except Exception:
+        logger.debug("Failed to log effective input", exc_info=True)
 
     try:
         result = MODEL.predict(**predict_input)
@@ -329,6 +428,22 @@ def run(job):
         "segments": result.segments,
         "detected_language": result.detected_language,
     }
+    # Возвращаем отладочную информацию (формат аудио и др.), если она есть
+    try:
+        if getattr(result, "debug_info", None) is not None:
+            output_dict["debug_info"] = result.debug_info
+    except Exception:
+        logger.debug("Failed to attach debug_info", exc_info=True)
+
+    # Дополнительно возвращаем эффективно используемые параметры (санитизированные)
+    try:
+        sanitized_effective = dict(effective_input)
+        token_val2 = sanitized_effective.get("huggingface_access_token")
+        if token_val2:
+            sanitized_effective["huggingface_access_token"] = _mask_token(token_val2)
+        output_dict["effective_input"] = sanitized_effective
+    except Exception:
+        logger.debug("Failed to attach effective_input", exc_info=True)
     # 4) идентификация спикеров — отключено
 
     # Добавляем предупреждения к ответу, если есть

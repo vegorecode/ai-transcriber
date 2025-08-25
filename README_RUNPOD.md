@@ -7,12 +7,44 @@
 - Русифицированная модель Whisper (`/models/faster-whisper-large-v3-russian`).
 - Пороговые параметры ASR можно передать в запросе или через ENV:
   - `no_speech_threshold` (дефолт 0.6)
-  - `log_prob_threshold` (дефолт -1.0)
+  - `log_prob_threshold` (дефолт -1.0; совм. `LOGPROB_THRESHOLD`)
   - `compression_ratio_threshold` (дефолт 2.4)
-- Логи контейнера возвращаются в поле `logs` ответа (пер‑запросный буфер из `container_log.txt`).
+- Логи контейнера возвращаются в поле `logs` ответа (пер‑запросный буфер из `container_log.txt`). В режиме `debug: true` дополнительно возвращается объект `debug_info` со слепком конфигурации инференса и проверкой формата входного аудио (совпадает ли 16 kHz mono и был ли задействован ffmpeg‑фоллбек).
 - Поддержка диаризации (`pyannote`) через обёртку WhisperX: `whisperx.diarize.DiarizationPipeline`.
 
 > Важно: воркер — только GPU. Диаризация вызывается через `whisperx.diarize.DiarizationPipeline(model_name="pyannote/speaker-diarization-3.1", device="cuda")` с передачей локального пути к аудиофайлу.
+
+## Приоритет источников параметров
+
+Единый приоритет для всех основных параметров:
+
+1) Запрос (если ключ присутствует);
+2) Переменные окружения (если заданы);
+3) Дефолт из `src/rp_schema.py`.
+
+Полный список ENV‑алиасов:
+
+- model: `MODEL`
+- language: — (не задаём алиас, чтобы не конфликтовать с системной `LANGUAGE`)
+- compute_type: `COMPUTE_TYPE`
+- language_detection_min_prob/max_tries: `LANGUAGE_DETECTION_MIN_PROB` / `LANGUAGE_DETECTION_MAX_TRIES`
+- batch_size: `BATCH_SIZE`
+- beam_size: `BEAM_SIZE`
+- temperature: `TEMPERATURE`
+- temperature_increment_on_fallback: `TEMPERATURE_INCREMENT_ON_FALLBACK`
+- vad_onset/vad_offset: `VAD_ONSET` / `VAD_OFFSET`
+- min_duration_on/min_duration_off: `MIN_DURATION_ON` / `MIN_DURATION_OFF`
+- pad_onset/pad_offset: `PAD_ONSET` / `PAD_OFFSET`
+- align_output: `ALIGN_OUTPUT`
+- output_format: `OUTPUT_FORMAT`
+- diarization/diarize: `DIARIZATION` / `DIARIZE`
+- huggingface_access_token: `HUGGINGFACE_ACCESS_TOKEN`, `HF_TOKEN`
+- min_speakers/max_speakers: `MIN_SPEAKERS` / `MAX_SPEAKERS`
+- length_penalty: `LENGTH_PENALTY`
+- no_speech_threshold: `NO_SPEECH_THRESHOLD`
+- log_prob_threshold: `LOG_PROB_THRESHOLD` (совм. `LOGPROB_THRESHOLD`)
+- compression_ratio_threshold: `COMPRESSION_RATIO_THRESHOLD`
+- debug: `DEBUG`
 
 ## Сборка контейнера
 
@@ -54,7 +86,7 @@ docker push your-dockerhub/whisperx-worker:latest
 
   - Image: `your-dockerhub/whisperx-worker:latest`
   - Runs On: GPU
-  - Disk: 30–50 GB (если предзагружаете модели)
+  - Disk: 15-20 GB
   - Переменные окружения:
     - `HF_TOKEN` — если требуется диаризация (`pyannote`).
 
@@ -70,7 +102,7 @@ Worker ожидает JSON вида (упрощённая форма):
     "audio_file": "https://example.com/audio.wav",
     "language": null,
     "diarization": false,
-    "batch_size": 64,
+    "batch_size": 32,
     "debug": false
   }
 }
@@ -82,7 +114,7 @@ Worker ожидает JSON вида (упрощённая форма):
 {
   "input": {
     "audio_file": "https://github.com/runpod-workers/sample-inputs/raw/main/audio/gettysburg.wav",
-    "batch_size": 16,
+    "batch_size": 32,
     "beam_size": 5,
     "temperature": 0.0,
     "vad_onset": 0.350,
@@ -94,7 +126,7 @@ Worker ожидает JSON вида (упрощённая форма):
     "diarization": true,
     "min_speakers": 1,
     "max_speakers": 4,
-    "length_penalty": 1.0,
+    "length_penalty": 1.1,
     "debug": true
   }
 }
@@ -106,23 +138,29 @@ Worker ожидает JSON вида (упрощённая форма):
 - `model` (string, по умолчанию: `faster-whisper-large-v3-russian`): имя/ID модели или локальный путь `/models/<model>`.
 - `language` (string|null, по умолчанию: `null`): ISO‑код языка; `null` — автоопределение.
 - `compute_type` (string, по умолчанию: `float16`): допустимы `float16`/`int8`/`float32`.
-- `batch_size` (int, по умолчанию: `64`).
-- `beam_size` (int|null, по умолчанию: `null`).
+- `batch_size` (int, по умолчанию: `32`).
+- `beam_size` (int, по умолчанию: `5`).
 - `temperature` (float, по умолчанию: `0`).
-- `vad_onset` (float, по умолчанию: `0.500`).
-- `vad_offset` (float, по умолчанию: `0.363`).
+- `vad_onset` (float, по умолчанию: `0.300`).
+- `vad_offset` (float, по умолчанию: `0.250`).
 - `min_duration_on` (float, по умолчанию: `0.08`).
 - `min_duration_off` (float, по умолчанию: `0.08`).
 - `pad_onset` (float, по умолчанию: `0.0`).
 - `pad_offset` (float, по умолчанию: `0.0`).
-- `diarization` (bool, по умолчанию: `false`): включает диаризацию. Алиас `diarize` допустим.
+- `align_output` (bool, по умолчанию: `true`).
+- `diarization` (bool, по умолчанию: `true`): включает диаризацию. Алиас `diarize` допустим.
 - `huggingface_access_token` (string|null): токен HF; при отсутствии используется `HF_TOKEN` из окружения (если задан).
 - `min_speakers` / `max_speakers` (int|null): границы числа спикеров при диаризации.
-- `length_penalty` (float|null).
+- `length_penalty` (float, по умолчанию: `1.1`).
 - `no_speech_threshold` (float, по умолчанию: `0.6`): приоритет — запрос → ENV → дефолт.
 - `log_prob_threshold` (float, по умолчанию: `-1.0`): приоритет — запрос → ENV → дефолт.
 - `compression_ratio_threshold` (float, по умолчанию: `2.4`): приоритет — запрос → ENV → дефолт.
-- `debug` (bool, по умолчанию: `false`): подробные тайминги; хвост логов включён всегда.
+- `debug` (bool, по умолчанию: `false`): подробные тайминги; хвост логов включён всегда. При `true` поле `debug_info` содержит:
+  - `audio`: `{ is_compatible, expected, actual, used_fallback, source, reason }`
+  - `runtime`: `{ device, torch_tf32 }`
+  - `model`: `{ path, compute_type, asr_options, vad_options }`
+  - `decode`: `{ batch_size, beam_size, temperature, temperature_increment_on_fallback, length_penalty }`
+  - `output`: `{ align_output, diarization, min_speakers, max_speakers }`
 
 ## Формат ответа
 
@@ -165,9 +203,9 @@ Worker ожидает JSON вида (упрощённая форма):
 - `HF_TOKEN` — токен Hugging Face (логинится на старте воркера). Используется:
   - для аутентификации в HF (глобально);
   - при сборке для докачки приватных моделей через BuildKit secret.
-- `NO_SPEECH_THRESHOLD` (alt: `ASR_NO_SPEECH_THRESHOLD`) — порог пропуска тишины; по умолчанию `0.6`.
-- `LOGPROB_THRESHOLD` (alt: `ASR_LOGPROB_THRESHOLD`) — порог средней лог‑вероятности; по умолчанию `-1.0`.
-- `COMPRESSION_RATIO_THRESHOLD` (alt: `ASR_COMPRESSION_RATIO_THRESHOLD`) — порог отношения сжатия; по умолчанию `2.4`.
+- `NO_SPEECH_THRESHOLD` — порог пропуска тишины; по умолчанию `0.6`.
+- `LOG_PROB_THRESHOLD` — порог средней лог‑вероятности; по умолчанию `-1.0` (совм. `LOGPROB_THRESHOLD`).
+- `COMPRESSION_RATIO_THRESHOLD` — порог отношения сжатия; по умолчанию `2.4`.
 
 Пороговые параметры используются внутри `predict.py` и могут быть переданы в запросе либо через ENV (приоритет: запрос → ENV → дефолт).
 
@@ -177,5 +215,3 @@ Worker ожидает JSON вида (упрощённая форма):
 - Нет токена HF → диаризация будет пропущена, появится предупреждение в логах.
 - Большие файлы → увеличьте `containerDiskInGb` и/или снизьте `batch_size`.
 - Для полного отсутствия докачек на старте — передайте `HF_TOKEN` на этапе сборки через BuildKit secret.
-
-

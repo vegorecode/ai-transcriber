@@ -18,7 +18,6 @@ triton>=3.3.0; sys_platform == 'linux'
 numpy>=2.0.2,<2.1.0
 
 # --- Utils ---
-pydub==0.25.1
 python-dotenv>=1.0
 huggingface-hub
 
