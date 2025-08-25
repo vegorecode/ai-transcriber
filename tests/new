@@ -1,0 +1,889 @@
+{
+    "delayTime": 10939,
+    "executionTime": 20031,
+    "id": "7817f6ba-a501-4409-903e-0779f54058c9-e2",
+    "output": {
+      "detected_language": "ru",
+      "logs": "2025-08-21 10:26:47 INFO [rp_handler]: Libs: torch=2.7.1+cu128, transformers=4.55.2, torchvision=0.22.1+cu128, NO_TORCHVISION=1\n2025-08-21 10:26:47 DEBUG [rp_handler]: Audio downloaded → /app/jobs/7817f6ba-a501-4409-903e-0779f54058c9-e2/downloaded_files/edf434cc-d68d-4274-ba7b-b871aba3067a.wav\n2025-08-21 10:26:53 DEBUG [predict]: Время загрузки модели: 5242.73 мс\n2025-08-21 10:26:53 DEBUG [predict]: Время загрузки аудио: 69.98 мс\n2025-08-21 10:26:55 DEBUG [predict]: Время транскрипции: 1898.28 мс\n2025-08-21 10:27:02 DEBUG [predict]: Duration to align output: 7312.68 ms\n2025-08-21 10:27:05 DEBUG [predict]: Duration to diarize segments: 2426.87 ms\n2025-08-21 10:27:05 INFO [predict]: макс. резерв памяти GPU за время работы: 2.71 ГБ\n",
+      "segments": [
+        {
+          "end": 10.985,
+          "speaker": "SPEAKER_00",
+          "start": 0.031,
+          "text": "Добрый день.",
+          "words": [
+            {
+              "end": 3.796,
+              "score": 0.741,
+              "speaker": "SPEAKER_00",
+              "start": 0.031,
+              "word": "Добрый"
+            },
+            {
+              "end": 10.985,
+              "score": 0.789,
+              "speaker": "SPEAKER_01",
+              "start": 9.182,
+              "word": "день."
+            }
+          ]
+        },
+        {
+          "end": 21.158,
+          "speaker": "SPEAKER_01",
+          "start": 11.065,
+          "text": "Если говорить о периоде пандемии из-за того, что меньше стал ездить, то это, наверное, два-три раза в месяц.",
+          "words": [
+            {
+              "end": 11.285,
+              "score": 0.999,
+              "speaker": "SPEAKER_01",
+              "start": 11.065,
+              "word": "Если"
+            },
+            {
+              "end": 11.906,
+              "score": 0.914,
+              "speaker": "SPEAKER_01",
+              "start": 11.345,
+              "word": "говорить"
+            },
+            {
+              "end": 11.946,
+              "score": 0.901,
+              "start": 11.926,
+              "word": "о"
+            },
+            {
+              "end": 12.427,
+              "score": 0.246,
+              "speaker": "SPEAKER_01",
+              "start": 12.066,
+              "word": "периоде"
+            },
+            {
+              "end": 13.588,
+              "score": 0.798,
+              "speaker": "SPEAKER_01",
+              "start": 12.467,
+              "word": "пандемии"
+            },
+            {
+              "end": 13.768,
+              "score": 0.192,
+              "speaker": "SPEAKER_01",
+              "start": 13.648,
+              "word": "из-за"
+            },
+            {
+              "end": 14.049,
+              "score": 0.851,
+              "speaker": "SPEAKER_01",
+              "start": 13.808,
+              "word": "того,"
+            },
+            {
+              "end": 14.249,
+              "score": 0.95,
+              "speaker": "SPEAKER_01",
+              "start": 14.069,
+              "word": "что"
+            },
+            {
+              "end": 15.47,
+              "score": 0.956,
+              "speaker": "SPEAKER_01",
+              "start": 15.15,
+              "word": "меньше"
+            },
+            {
+              "end": 15.811,
+              "score": 0.69,
+              "speaker": "SPEAKER_01",
+              "start": 15.51,
+              "word": "стал"
+            },
+            {
+              "end": 16.151,
+              "score": 0.702,
+              "speaker": "SPEAKER_01",
+              "start": 15.831,
+              "word": "ездить,"
+            },
+            {
+              "end": 16.352,
+              "score": 0.758,
+              "speaker": "SPEAKER_01",
+              "start": 16.171,
+              "word": "то"
+            },
+            {
+              "end": 16.452,
+              "score": 0.116,
+              "speaker": "SPEAKER_01",
+              "start": 16.372,
+              "word": "это,"
+            },
+            {
+              "end": 18.735,
+              "score": 0.882,
+              "speaker": "SPEAKER_01",
+              "start": 16.472,
+              "word": "наверное,"
+            },
+            {
+              "end": 20.016,
+              "score": 0.924,
+              "speaker": "SPEAKER_01",
+              "start": 19.616,
+              "word": "два-три"
+            },
+            {
+              "end": 20.316,
+              "score": 0.962,
+              "speaker": "SPEAKER_01",
+              "start": 20.076,
+              "word": "раза"
+            },
+            {
+              "end": 20.437,
+              "score": 0.66,
+              "speaker": "SPEAKER_01",
+              "start": 20.377,
+              "word": "в"
+            },
+            {
+              "end": 21.158,
+              "score": 0.924,
+              "speaker": "SPEAKER_01",
+              "start": 20.457,
+              "word": "месяц."
+            }
+          ]
+        },
+        {
+          "end": 24.722,
+          "speaker": "SPEAKER_01",
+          "start": 21.258,
+          "text": "Если мы говорим про время, когда не было пандемии, то это",
+          "words": [
+            {
+              "end": 21.538,
+              "score": 0.376,
+              "speaker": "SPEAKER_00",
+              "start": 21.258,
+              "word": "Если"
+            },
+            {
+              "end": 21.598,
+              "score": 0.514,
+              "speaker": "SPEAKER_01",
+              "start": 21.558,
+              "word": "мы"
+            },
+            {
+              "end": 21.939,
+              "score": 0.804,
+              "speaker": "SPEAKER_01",
+              "start": 21.638,
+              "word": "говорим"
+            },
+            {
+              "end": 22.099,
+              "score": 0.721,
+              "speaker": "SPEAKER_01",
+              "start": 21.959,
+              "word": "про"
+            },
+            {
+              "end": 22.399,
+              "score": 0.922,
+              "speaker": "SPEAKER_01",
+              "start": 22.139,
+              "word": "время,"
+            },
+            {
+              "end": 22.699,
+              "score": 0.993,
+              "speaker": "SPEAKER_01",
+              "start": 22.439,
+              "word": "когда"
+            },
+            {
+              "end": 22.86,
+              "score": 0.99,
+              "speaker": "SPEAKER_01",
+              "start": 22.76,
+              "word": "не"
+            },
+            {
+              "end": 23.08,
+              "score": 0.954,
+              "speaker": "SPEAKER_01",
+              "start": 22.9,
+              "word": "было"
+            },
+            {
+              "end": 23.761,
+              "score": 0.62,
+              "speaker": "SPEAKER_01",
+              "start": 23.12,
+              "word": "пандемии,"
+            },
+            {
+              "end": 23.941,
+              "score": 0.766,
+              "speaker": "SPEAKER_01",
+              "start": 23.821,
+              "word": "то"
+            },
+            {
+              "end": 24.722,
+              "score": 0,
+              "start": 24.662,
+              "word": "это"
+            }
+          ]
+        },
+        {
+          "end": 31.65,
+          "speaker": "SPEAKER_01",
+          "start": 24.719,
+          "text": " два раза в неделю, то есть получается восемь раз в месяц.",
+          "words": [
+            {
+              "end": 26.181,
+              "score": 0.948,
+              "speaker": "SPEAKER_01",
+              "start": 24.719,
+              "word": "два"
+            },
+            {
+              "end": 26.522,
+              "score": 0.418,
+              "speaker": "SPEAKER_01",
+              "start": 26.241,
+              "word": "раза"
+            },
+            {
+              "end": 26.562,
+              "score": 0.71,
+              "speaker": "SPEAKER_01",
+              "start": 26.542,
+              "word": "в"
+            },
+            {
+              "end": 27.123,
+              "score": 0.966,
+              "speaker": "SPEAKER_01",
+              "start": 26.622,
+              "word": "неделю,"
+            },
+            {
+              "end": 27.343,
+              "score": 0.78,
+              "speaker": "SPEAKER_01",
+              "start": 27.243,
+              "word": "то"
+            },
+            {
+              "end": 27.543,
+              "score": 0.66,
+              "speaker": "SPEAKER_01",
+              "start": 27.363,
+              "word": "есть"
+            },
+            {
+              "end": 29.106,
+              "score": 0.735,
+              "speaker": "SPEAKER_01",
+              "start": 27.563,
+              "word": "получается"
+            },
+            {
+              "end": 29.426,
+              "score": 0.818,
+              "speaker": "SPEAKER_01",
+              "start": 29.146,
+              "word": "восемь"
+            },
+            {
+              "end": 29.606,
+              "score": 0.503,
+              "speaker": "SPEAKER_01",
+              "start": 29.466,
+              "word": "раз"
+            },
+            {
+              "end": 29.646,
+              "score": 0.001,
+              "speaker": "SPEAKER_01",
+              "start": 29.626,
+              "word": "в"
+            },
+            {
+              "end": 31.65,
+              "score": 0.552,
+              "speaker": "SPEAKER_00",
+              "start": 29.667,
+              "word": "месяц."
+            }
+          ]
+        },
+        {
+          "end": 38.901,
+          "speaker": "SPEAKER_00",
+          "start": 31.67,
+          "text": "А можешь ли ты вспомнить, как часто ты при заправке заходишь в магазин и что-то приобретаешь?",
+          "words": [
+            {
+              "end": 31.69,
+              "score": 0.67,
+              "speaker": "SPEAKER_00",
+              "start": 31.67,
+              "word": "А"
+            },
+            {
+              "end": 31.93,
+              "score": 0.26,
+              "speaker": "SPEAKER_00",
+              "start": 31.77,
+              "word": "можешь"
+            },
+            {
+              "end": 31.99,
+              "score": 0.385,
+              "speaker": "SPEAKER_00",
+              "start": 31.95,
+              "word": "ли"
+            },
+            {
+              "end": 32.11,
+              "score": 0.819,
+              "speaker": "SPEAKER_00",
+              "start": 32.03,
+              "word": "ты"
+            },
+            {
+              "end": 32.551,
+              "score": 0.763,
+              "speaker": "SPEAKER_00",
+              "start": 32.15,
+              "word": "вспомнить,"
+            },
+            {
+              "end": 32.771,
+              "score": 0.893,
+              "speaker": "SPEAKER_00",
+              "start": 32.571,
+              "word": "как"
+            },
+            {
+              "end": 33.392,
+              "score": 0.957,
+              "speaker": "SPEAKER_00",
+              "start": 32.831,
+              "word": "часто"
+            },
+            {
+              "end": 33.673,
+              "score": 0.804,
+              "speaker": "SPEAKER_00",
+              "start": 33.492,
+              "word": "ты"
+            },
+            {
+              "end": 34.153,
+              "score": 0.993,
+              "speaker": "SPEAKER_00",
+              "start": 33.793,
+              "word": "при"
+            },
+            {
+              "end": 34.874,
+              "score": 0.976,
+              "speaker": "SPEAKER_00",
+              "start": 34.233,
+              "word": "заправке"
+            },
+            {
+              "end": 35.375,
+              "score": 0.996,
+              "speaker": "SPEAKER_00",
+              "start": 34.975,
+              "word": "заходишь"
+            },
+            {
+              "end": 35.415,
+              "score": 0.997,
+              "speaker": "SPEAKER_00",
+              "start": 35.395,
+              "word": "в"
+            },
+            {
+              "end": 36.136,
+              "score": 0.968,
+              "speaker": "SPEAKER_00",
+              "start": 35.475,
+              "word": "магазин"
+            },
+            {
+              "end": 36.196,
+              "score": 0.998,
+              "speaker": "SPEAKER_00",
+              "start": 36.176,
+              "word": "и"
+            },
+            {
+              "end": 37.318,
+              "score": 0.939,
+              "speaker": "SPEAKER_00",
+              "start": 37.058,
+              "word": "что-то"
+            },
+            {
+              "end": 38.901,
+              "score": 0.907,
+              "speaker": "SPEAKER_00",
+              "start": 37.378,
+              "word": "приобретаешь?"
+            }
+          ]
+        },
+        {
+          "end": 46.873,
+          "speaker": "SPEAKER_01",
+          "start": 39.642,
+          "text": "Если говорить про заправку, я постоянно хожу в магазин, потому что у них там находится касса.",
+          "words": [
+            {
+              "end": 39.882,
+              "score": 0.368,
+              "speaker": "SPEAKER_01",
+              "start": 39.642,
+              "word": "Если"
+            },
+            {
+              "end": 40.122,
+              "score": 0.601,
+              "speaker": "SPEAKER_01",
+              "start": 39.902,
+              "word": "говорить"
+            },
+            {
+              "end": 41.124,
+              "score": 0.924,
+              "speaker": "SPEAKER_01",
+              "start": 40.243,
+              "word": "про"
+            },
+            {
+              "end": 41.945,
+              "score": 0.968,
+              "speaker": "SPEAKER_01",
+              "start": 41.184,
+              "word": "заправку,"
+            },
+            {
+              "end": 42.146,
+              "score": 0.996,
+              "speaker": "SPEAKER_01",
+              "start": 42.025,
+              "word": "я"
+            },
+            {
+              "end": 43.708,
+              "score": 0.779,
+              "speaker": "SPEAKER_01",
+              "start": 42.166,
+              "word": "постоянно"
+            },
+            {
+              "end": 44.008,
+              "score": 0.962,
+              "speaker": "SPEAKER_01",
+              "start": 43.828,
+              "word": "хожу"
+            },
+            {
+              "end": 44.048,
+              "score": 0.666,
+              "speaker": "SPEAKER_01",
+              "start": 44.028,
+              "word": "в"
+            },
+            {
+              "end": 44.409,
+              "score": 0.567,
+              "speaker": "SPEAKER_01",
+              "start": 44.068,
+              "word": "магазин,"
+            },
+            {
+              "end": 44.689,
+              "score": 0.96,
+              "speaker": "SPEAKER_01",
+              "start": 44.429,
+              "word": "потому"
+            },
+            {
+              "end": 45.11,
+              "score": 0.987,
+              "speaker": "SPEAKER_01",
+              "start": 44.77,
+              "word": "что"
+            },
+            {
+              "end": 45.37,
+              "score": 0.626,
+              "speaker": "SPEAKER_01",
+              "start": 45.21,
+              "word": "у"
+            },
+            {
+              "end": 45.511,
+              "score": 0.566,
+              "speaker": "SPEAKER_01",
+              "start": 45.39,
+              "word": "них"
+            },
+            {
+              "end": 45.651,
+              "score": 0.863,
+              "speaker": "SPEAKER_01",
+              "start": 45.531,
+              "word": "там"
+            },
+            {
+              "end": 46.112,
+              "score": 0.975,
+              "speaker": "SPEAKER_01",
+              "start": 45.691,
+              "word": "находится"
+            },
+            {
+              "end": 46.873,
+              "score": 0.696,
+              "speaker": "SPEAKER_01",
+              "start": 46.192,
+              "word": "касса."
+            }
+          ]
+        },
+        {
+          "end": 53.663,
+          "speaker": "SPEAKER_01",
+          "start": 47.373,
+          "text": "Покупаю крайне редко, в основном это либо омывающая жидкость,",
+          "words": [
+            {
+              "end": 47.934,
+              "score": 0.994,
+              "speaker": "SPEAKER_01",
+              "start": 47.373,
+              "word": "Покупаю"
+            },
+            {
+              "end": 48.876,
+              "score": 0.948,
+              "speaker": "SPEAKER_01",
+              "start": 47.954,
+              "word": "крайне"
+            },
+            {
+              "end": 50.098,
+              "score": 0.852,
+              "speaker": "SPEAKER_01",
+              "start": 48.976,
+              "word": "редко,"
+            },
+            {
+              "end": 50.158,
+              "score": 0.531,
+              "speaker": "SPEAKER_01",
+              "start": 50.138,
+              "word": "в"
+            },
+            {
+              "end": 50.678,
+              "score": 0.935,
+              "speaker": "SPEAKER_01",
+              "start": 50.198,
+              "word": "основном"
+            },
+            {
+              "end": 50.939,
+              "score": 0.907,
+              "speaker": "SPEAKER_01",
+              "start": 50.759,
+              "word": "это"
+            },
+            {
+              "end": 52.201,
+              "score": 0.996,
+              "speaker": "SPEAKER_01",
+              "start": 50.979,
+              "word": "либо"
+            },
+            {
+              "end": 52.922,
+              "score": 0.869,
+              "speaker": "SPEAKER_01",
+              "start": 52.321,
+              "word": "омывающая"
+            },
+            {
+              "end": 53.663,
+              "score": 0.827,
+              "speaker": "SPEAKER_01",
+              "start": 53.002,
+              "word": "жидкость,"
+            }
+          ]
+        },
+        {
+          "end": 60.446,
+          "speaker": "SPEAKER_01",
+          "start": 54.031,
+          "text": "Либо если утро, то это вот этот хот-дог с чаем.",
+          "words": [
+            {
+              "end": 54.773,
+              "score": 0.716,
+              "speaker": "SPEAKER_01",
+              "start": 54.031,
+              "word": "Либо"
+            },
+            {
+              "end": 55.214,
+              "score": 0.948,
+              "speaker": "SPEAKER_01",
+              "start": 54.833,
+              "word": "если"
+            },
+            {
+              "end": 55.595,
+              "score": 0.973,
+              "speaker": "SPEAKER_01",
+              "start": 55.314,
+              "word": "утро,"
+            },
+            {
+              "end": 55.755,
+              "score": 0.993,
+              "speaker": "SPEAKER_01",
+              "start": 55.635,
+              "word": "то"
+            },
+            {
+              "end": 56.798,
+              "score": 0.998,
+              "speaker": "SPEAKER_01",
+              "start": 55.815,
+              "word": "это"
+            },
+            {
+              "end": 58.782,
+              "score": 0.597,
+              "speaker": "SPEAKER_01",
+              "start": 58.642,
+              "word": "вот"
+            },
+            {
+              "end": 59.043,
+              "score": 0.95,
+              "speaker": "SPEAKER_01",
+              "start": 58.842,
+              "word": "этот"
+            },
+            {
+              "end": 60.005,
+              "score": 0.722,
+              "speaker": "SPEAKER_01",
+              "start": 59.123,
+              "word": "хот-дог"
+            },
+            {
+              "end": 60.045,
+              "score": 0.003,
+              "speaker": "SPEAKER_01",
+              "start": 60.025,
+              "word": "с"
+            },
+            {
+              "end": 60.446,
+              "score": 0.723,
+              "speaker": "SPEAKER_01",
+              "start": 60.065,
+              "word": "чаем."
+            }
+          ]
+        },
+        {
+          "end": 66.4,
+          "speaker": "SPEAKER_01",
+          "start": 60.466,
+          "text": "Ну, наверное, это происходит, не знаю, может быть, раз в месяц или в несколько месяцев.",
+          "words": [
+            {
+              "end": 60.546,
+              "score": 0.378,
+              "speaker": "SPEAKER_01",
+              "start": 60.466,
+              "word": "Ну,"
+            },
+            {
+              "end": 60.967,
+              "score": 0.817,
+              "speaker": "SPEAKER_01",
+              "start": 60.567,
+              "word": "наверное,"
+            },
+            {
+              "end": 61.088,
+              "score": 0.949,
+              "speaker": "SPEAKER_01",
+              "start": 60.988,
+              "word": "это"
+            },
+            {
+              "end": 61.95,
+              "score": 0.972,
+              "speaker": "SPEAKER_01",
+              "start": 61.148,
+              "word": "происходит,"
+            },
+            {
+              "end": 62.09,
+              "score": 0.911,
+              "speaker": "SPEAKER_01",
+              "start": 62.01,
+              "word": "не"
+            },
+            {
+              "end": 62.872,
+              "score": 0.745,
+              "speaker": "SPEAKER_01",
+              "start": 62.13,
+              "word": "знаю,"
+            },
+            {
+              "end": 63.193,
+              "score": 0.989,
+              "speaker": "SPEAKER_01",
+              "start": 62.932,
+              "word": "может"
+            },
+            {
+              "end": 63.453,
+              "score": 0.506,
+              "speaker": "SPEAKER_01",
+              "start": 63.233,
+              "word": "быть,"
+            },
+            {
+              "end": 64.516,
+              "score": 0.955,
+              "speaker": "SPEAKER_01",
+              "start": 63.473,
+              "word": "раз"
+            },
+            {
+              "end": 64.556,
+              "score": 0.94,
+              "speaker": "SPEAKER_01",
+              "start": 64.536,
+              "word": "в"
+            },
+            {
+              "end": 65.057,
+              "score": 0.898,
+              "speaker": "SPEAKER_01",
+              "start": 64.696,
+              "word": "месяц"
+            },
+            {
+              "end": 65.177,
+              "score": 0.501,
+              "speaker": "SPEAKER_01",
+              "start": 65.077,
+              "word": "или"
+            },
+            {
+              "end": 65.218,
+              "score": 0.998,
+              "speaker": "SPEAKER_01",
+              "start": 65.198,
+              "word": "в"
+            },
+            {
+              "end": 65.619,
+              "score": 0.889,
+              "speaker": "SPEAKER_01",
+              "start": 65.258,
+              "word": "несколько"
+            },
+            {
+              "end": 66.4,
+              "score": 0.942,
+              "speaker": "SPEAKER_01",
+              "start": 65.659,
+              "word": "месяцев."
+            }
+          ]
+        },
+        {
+          "end": 70.47,
+          "speaker": "SPEAKER_00",
+          "start": 66.982,
+          "text": "А что-то из шоколада, допустим, выкупал?",
+          "words": [
+            {
+              "end": 67.202,
+              "score": 0.995,
+              "speaker": "SPEAKER_00",
+              "start": 66.982,
+              "word": "А"
+            },
+            {
+              "end": 67.864,
+              "score": 0.855,
+              "speaker": "SPEAKER_00",
+              "start": 67.282,
+              "word": "что-то"
+            },
+            {
+              "end": 68.626,
+              "score": 0.822,
+              "speaker": "SPEAKER_00",
+              "start": 67.884,
+              "word": "из"
+            },
+            {
+              "end": 69.207,
+              "score": 0.671,
+              "speaker": "SPEAKER_00",
+              "start": 68.746,
+              "word": "шоколада,"
+            },
+            {
+              "end": 69.608,
+              "score": 0.829,
+              "speaker": "SPEAKER_00",
+              "start": 69.227,
+              "word": "допустим,"
+            },
+            {
+              "end": 70.47,
+              "score": 0.695,
+              "speaker": "SPEAKER_00",
+              "start": 69.628,
+              "word": "выкупал?"
+            }
+          ]
+        }
+      ]
+    },
+    "status": "COMPLETED",
+    "workerId": "ca4tgufh2iljft"
+  }

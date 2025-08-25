@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import time
+from pathlib import Path as PathlibPath
 from typing import Any
 
 # Отключаем автоподтягивание torchvision внутри transformers до импорта whisperx
@@ -41,19 +42,10 @@ compute_type = "float16"
 device = "cuda"
 whisper_arch = "./models/faster-whisper-large-v3-russian"
 
-# Жёстко заданные пороги (можно переопределить через ENV); поддерживаем имена как в run.sh
-NO_SPEECH_THRESHOLD = float(
-    os.environ.get("NO_SPEECH_THRESHOLD")
-    or os.environ.get("ASR_NO_SPEECH_THRESHOLD", "0.6")
-)
-LOGPROB_THRESHOLD = float(
-    os.environ.get("LOGPROB_THRESHOLD")
-    or os.environ.get("ASR_LOGPROB_THRESHOLD", "-1.0")
-)
-COMPRESSION_RATIO_THRESHOLD = float(
-    os.environ.get("COMPRESSION_RATIO_THRESHOLD")
-    or os.environ.get("ASR_COMPRESSION_RATIO_THRESHOLD", "2.4")
-)
+# Базовые дефолты порогов ASR (как в старом проекте/run.sh)
+DEFAULT_NO_SPEECH_THRESHOLD = 0.60
+DEFAULT_LOGPROB_THRESHOLD = -1.0
+DEFAULT_COMPRESSION_RATIO_THRESHOLD = 2.4
 
 
 class Output(BaseModel):
@@ -102,10 +94,24 @@ class Predictor(BasePredictor):
             default=None,
         ),
         vad_onset: float = Input(
-            description="Порог срабатывания VAD (onset)", default=0.500
+            description="Порог срабатывания VAD (onset)", default=0.300
         ),
         vad_offset: float = Input(
-            description="Порог окончания VAD (offset)", default=0.363
+            description="Порог окончания VAD (offset)", default=0.250
+        ),
+        min_duration_on: float = Input(
+            description="Мин. длительность речи (сек) для VAD", default=0.08
+        ),
+        min_duration_off: float = Input(
+            description="Мин. длительность тишины (сек) для VAD", default=0.08
+        ),
+        pad_onset: float = Input(
+            description="Продлить начало каждого VAD-сегмента на указанное кол-во секунд",
+            default=0.0,
+        ),
+        pad_offset: float = Input(
+            description="Продлить конец каждого VAD-сегмента на указанное кол-во секунд",
+            default=0.0,
         ),
         align_output: bool = Input(
             description="Выровнять вывод для точных тайм‑кодов слов",
@@ -130,6 +136,18 @@ class Predictor(BasePredictor):
         length_penalty: float = Input(
             description="Штраф за длину при декодировании (beam search)", default=None
         ),
+        no_speech_threshold: float = Input(
+            description="Порог no_speech для ASR (снижайте, чтобы меньше отбрасывать тихую речь)",
+            default=None,
+        ),
+        log_prob_threshold: float = Input(
+            description="Порог log_prob для ASR (снижайте, чтобы меньше отбрасывать сомнительные сегменты)",
+            default=None,
+        ),
+        compression_ratio_threshold: float = Input(
+            description="Порог compression_ratio для ASR (понизьте, чтобы меньше фильтровать)",
+            default=None,
+        ),
         output_format: str = Input(
             description="Желаемый формат ответа (информативно)", default="json"
         ),
@@ -139,160 +157,196 @@ class Predictor(BasePredictor):
         ),
     ) -> Output:
         with torch.inference_mode():
-            # Только GPU: первая CUDA‑карта
-            runtime_device = "cuda"
-            runtime_device_index = 0
-            # Сохраняем устройство в глобальной переменной для align/diarize
-            globals()["device"] = runtime_device
-            # Выбираем модель: локальная папка в /models или идентификатор
-            model_path = model
-            if model and not model.startswith("/") and "/" not in model:
-                local_candidate = f"/models/{model}"
-                model_path = (
-                    local_candidate if os.path.exists(local_candidate) else model
-                )
-            # Синхронизируем глобальные параметры для вспомогательных функций
-            globals()["whisper_arch"] = model_path
-            globals()["compute_type"] = compute_type
-            asr_options = {
-                "temperatures": [temperature],
-                # Жёстко заданные пороги, не приходят извне
-                "no_speech_threshold": NO_SPEECH_THRESHOLD,
-                "log_prob_threshold": LOGPROB_THRESHOLD,
-                "compression_ratio_threshold": COMPRESSION_RATIO_THRESHOLD,
-            }
-            if beam_size is not None:
-                asr_options["beam_size"] = beam_size
-            if length_penalty is not None:
-                asr_options["length_penalty"] = length_penalty
-            if temperature_increment_on_fallback is not None:
-                asr_options["temperature_increment_on_fallback"] = (
-                    temperature_increment_on_fallback
-                )
+            tmp_files_to_cleanup = []
+            try:
+                # Только GPU: первая CUDA‑карта
+                runtime_device = "cuda"
+                runtime_device_index = 0
+                # Сохраняем устройство в глобальной переменной для align/diarize
+                globals()["device"] = runtime_device
+                # Выбираем модель: локальная папка в /models или идентификатор
+                model_path = model
+                if model and not model.startswith("/") and "/" not in model:
+                    local_candidate = f"/models/{model}"
+                    model_path = (
+                        local_candidate if os.path.exists(local_candidate) else model
+                    )
+                # Синхронизируем глобальные параметры для вспомогательных функций
+                globals()["whisper_arch"] = model_path
+                globals()["compute_type"] = compute_type
+                asr_options = {
+                    "temperatures": [temperature],
+                    "no_speech_threshold": (
+                        no_speech_threshold
+                        if no_speech_threshold is not None
+                        else DEFAULT_NO_SPEECH_THRESHOLD
+                    ),
+                    "log_prob_threshold": (
+                        log_prob_threshold
+                        if log_prob_threshold is not None
+                        else DEFAULT_LOGPROB_THRESHOLD
+                    ),
+                    "compression_ratio_threshold": (
+                        compression_ratio_threshold
+                        if compression_ratio_threshold is not None
+                        else DEFAULT_COMPRESSION_RATIO_THRESHOLD
+                    ),
+                }
+                if beam_size is not None:
+                    asr_options["beam_size"] = beam_size
+                if length_penalty is not None:
+                    asr_options["length_penalty"] = length_penalty
+                if temperature_increment_on_fallback is not None:
+                    asr_options["temperature_increment_on_fallback"] = (
+                        temperature_increment_on_fallback
+                    )
 
-            vad_options = {"vad_onset": vad_onset, "vad_offset": vad_offset}
+                vad_options = {
+                    "vad_method": "pyannote",
+                    "vad_onset": vad_onset,
+                    "vad_offset": vad_offset,
+                    "min_duration_on": min_duration_on,
+                    "min_duration_off": min_duration_off,
+                    "pad_onset": pad_onset,
+                    "pad_offset": pad_offset,
+                }
 
-            audio_duration = get_audio_duration(audio_file)
+                audio_duration = get_audio_duration(audio_file)
 
-            if (
-                language is None
-                and language_detection_min_prob > 0
-                and audio_duration > 30000
-            ):
-                segments_duration_ms = 30000
-
-                language_detection_max_tries = min(
-                    language_detection_max_tries,
-                    math.floor(audio_duration / segments_duration_ms),
-                )
-
-                segments_starts = distribute_segments_equally(
-                    audio_duration, segments_duration_ms, language_detection_max_tries
-                )
-
-                logger.info(
-                    "Detecting languages on segments starting at %s",
-                    ", ".join(map(str, segments_starts)),
-                )
-
-                detected_language_details = detect_language(
-                    audio_file,
-                    segments_starts,
-                    language_detection_min_prob,
-                    language_detection_max_tries,
-                    asr_options,
-                    vad_options,
-                )
-
-                detected_language_code = detected_language_details["language"]
-                detected_language_prob = detected_language_details["probability"]
-                detected_language_iterations = detected_language_details["iterations"]
-
-                logger.info(
-                    "Detected language %s (%.2f) after %s iterations.",
-                    detected_language_code,
-                    detected_language_prob,
-                    detected_language_iterations,
-                )
-
-                language = detected_language_details["language"]
-
-            start_time = time.time_ns() / 1e6
-
-            model = whisperx.load_model(
-                model_path,
-                device=runtime_device,
-                device_index=runtime_device_index,
-                compute_type=compute_type,
-                language=language,
-                asr_options=asr_options,
-                vad_options=vad_options,
-            )
-
-            if debug:
-                elapsed_time = time.time_ns() / 1e6 - start_time
-                logger.debug("Время загрузки модели: %.2f мс", elapsed_time)
-
-            start_time = time.time_ns() / 1e6
-
-            audio = whisperx.load_audio(audio_file)
-
-            if debug:
-                elapsed_time = time.time_ns() / 1e6 - start_time
-                logger.debug("Время загрузки аудио: %.2f мс", elapsed_time)
-
-            start_time = time.time_ns() / 1e6
-
-            result = model.transcribe(audio, batch_size=batch_size)
-            detected_language = result["language"]
-
-            if debug:
-                elapsed_time = time.time_ns() / 1e6 - start_time
-                logger.debug("Время транскрипции: %.2f мс", elapsed_time)
-
-            gc.collect()
-            torch.cuda.empty_cache()
-            del model
-
-            if align_output:
                 if (
-                    detected_language in whisperx.alignment.DEFAULT_ALIGN_MODELS_TORCH
-                    or detected_language in whisperx.alignment.DEFAULT_ALIGN_MODELS_HF
+                    language is None
+                    and language_detection_min_prob > 0
+                    and audio_duration > 30000
                 ):
-                    result = align(audio, result, debug)
-                else:
-                    logger.warning(
-                        "Невозможно выровнять: язык %s не поддерживается в align",
-                        detected_language,
+                    segments_duration_ms = 30000
+
+                    language_detection_max_tries = min(
+                        language_detection_max_tries,
+                        math.floor(audio_duration / segments_duration_ms),
                     )
 
-            # alias поддержка
-            if diarize is not None:
-                diarization = diarize
-
-            if diarization:
-                if huggingface_access_token:
-                    result = run_diarization(
-                        audio_file,
-                        result,
-                        debug,
-                        huggingface_access_token,
-                        min_speakers,
-                        max_speakers,
-                        runtime_device,
+                    segments_starts = distribute_segments_equally(
+                        audio_duration,
+                        segments_duration_ms,
+                        language_detection_max_tries,
                     )
-                else:
+
                     logger.info(
-                        "Запрошена диаризация, но токен Hugging Face не указан — пропускаем"
+                        "Detecting languages on segments starting at %s",
+                        ", ".join(map(str, segments_starts)),
                     )
 
-            if debug:
-                logger.info(
-                    "макс. резерв памяти GPU за время работы: %.2f ГБ",
-                    torch.cuda.max_memory_reserved() / (1024**3),
+                    detected_language_details = detect_language(
+                        audio_file,
+                        segments_starts,
+                        language_detection_min_prob,
+                        language_detection_max_tries,
+                        asr_options,
+                        vad_options,
+                    )
+
+                    detected_language_code = detected_language_details["language"]
+                    detected_language_prob = detected_language_details["probability"]
+                    detected_language_iterations = detected_language_details[
+                        "iterations"
+                    ]
+
+                    logger.info(
+                        "Detected language %s (%.2f) after %s iterations.",
+                        detected_language_code,
+                        detected_language_prob,
+                        detected_language_iterations,
+                    )
+
+                    language = detected_language_details["language"]
+
+                start_time = time.time_ns() / 1e6
+
+                model = whisperx.load_model(
+                    model_path,
+                    device=runtime_device,
+                    device_index=runtime_device_index,
+                    compute_type=compute_type,
+                    language=language,
+                    asr_options=asr_options,
+                    vad_options=vad_options,
                 )
 
-        return Output(segments=result["segments"], detected_language=detected_language)
+                if debug:
+                    elapsed_time = time.time_ns() / 1e6 - start_time
+                    logger.debug("Время загрузки модели: %.2f мс", elapsed_time)
+
+                start_time = time.time_ns() / 1e6
+
+                # Загружаем аудио как есть: нормализация выполняется вне пайплайна
+                audio = whisperx.load_audio(audio_file)
+
+                if debug:
+                    elapsed_time = time.time_ns() / 1e6 - start_time
+                    logger.debug("Время загрузки аудио: %.2f мс", elapsed_time)
+
+                start_time = time.time_ns() / 1e6
+
+                result = model.transcribe(audio, batch_size=batch_size)
+                detected_language = result["language"]
+
+                if debug:
+                    elapsed_time = time.time_ns() / 1e6 - start_time
+                    logger.debug("Время транскрипции: %.2f мс", elapsed_time)
+
+                gc.collect()
+                torch.cuda.empty_cache()
+                del model
+
+                if align_output or diarization:
+                    try:
+                        result = align(audio, result, debug)
+                    except Exception as align_exc:
+                        logger.warning(
+                            "Выравнивание недоступно, пропускаем (lang=%s): %s",
+                            detected_language,
+                            str(align_exc),
+                        )
+
+                # alias поддержка
+                if diarize is not None:
+                    diarization = diarize
+
+                if diarization:
+                    if huggingface_access_token:
+                        result = run_diarization(
+                            audio_file,
+                            result,
+                            debug,
+                            huggingface_access_token,
+                            min_speakers,
+                            max_speakers,
+                            runtime_device,
+                        )
+                    else:
+                        logger.info(
+                            "Запрошена диаризация, но токен Hugging Face не указан — пропускаем"
+                        )
+
+                if debug:
+                    logger.info(
+                        "макс. резерв памяти GPU за время работы: %.2f ГБ",
+                        torch.cuda.max_memory_reserved() / (1024**3),
+                    )
+
+                output_segments = result["segments"]
+            finally:
+                # На всякий случай: временных файлов мы не создаём, но если есть — удалим
+                try:
+                    for p in tmp_files_to_cleanup:
+                        try:
+                            PathlibPath(p).unlink(missing_ok=True)  # type: ignore[arg-type]
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            return Output(segments=output_segments, detected_language=detected_language)
 
 
 def get_audio_duration(file_path):
@@ -416,17 +470,32 @@ def distribute_segments_equally(total_duration, segments_duration, iterations):
 def align(audio, result, debug):
     start_time = time.time_ns() / 1e6
 
-    model_a, metadata = whisperx.load_align_model(
-        language_code=result["language"], device="cuda"
-    )
-    result = whisperx.align(
-        result["segments"],
-        model_a,
-        metadata,
-        audio,
-        "cuda",
-        return_char_alignments=False,
-    )
+    # Совместимость с разными версиями whisperx: API мог меняться
+    # Пробуем рекомендованный путь, иначе пропускаем выравнивание
+    model_a = None
+    try:
+        load_align_model = getattr(whisperx, "load_align_model", None)
+        align_fn = getattr(whisperx, "align", None)
+        if callable(load_align_model) and callable(align_fn):
+            model_a, metadata = load_align_model(
+                language_code=result["language"], device="cuda"
+            )
+            result = align_fn(
+                result["segments"],
+                model_a,
+                metadata,
+                audio,
+                "cuda",
+                return_char_alignments=False,
+            )
+        else:
+            raise RuntimeError("align API is not available in this whisperx build")
+    finally:
+        if model_a is not None:
+            try:
+                del model_a
+            except Exception:
+                pass
 
     if debug:
         elapsed_time = time.time_ns() / 1e6 - start_time
@@ -434,7 +503,6 @@ def align(audio, result, debug):
 
     gc.collect()
     torch.cuda.empty_cache()
-    del model_a
 
     return result
 

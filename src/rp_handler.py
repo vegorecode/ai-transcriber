@@ -1,4 +1,5 @@
 # Точка входа сервера: загрузка переменных окружения и настройка логирования
+import io
 import logging
 import os
 import sys
@@ -20,7 +21,6 @@ from rp_schema import INPUT_VALIDATIONS
 load_dotenv(find_dotenv())
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-# Примечание: функционал верификации спикеров по образцам отключён и подлежит удалению.
 
 # Только GPU: падать, если CUDA недоступна
 if not torch.cuda.is_available():
@@ -78,22 +78,6 @@ MODEL = Predictor()
 MODEL.setup()
 
 
-def _tail_file(path: str, max_bytes: int = 200_000) -> str:
-    """Прочитать хвост файла (последние max_bytes) в виде строки."""
-    try:
-        size = os.path.getsize(path)
-        with open(path, "rb") as f:
-            if size > max_bytes:
-                f.seek(-max_bytes, os.SEEK_END)
-            data = f.read()
-        try:
-            return data.decode("utf-8", errors="replace")
-        except Exception:
-            return data.decode("latin-1", errors="replace")
-    except Exception:
-        return ""
-
-
 def cleanup_job_files(
     job_id, audio_file_path=None, jobs_directories=("/app/jobs", "/jobs")
 ):
@@ -130,7 +114,18 @@ def cleanup_job_files(
             seen.add(norm)
             unique_candidates.append(norm)
 
+    def _is_safe_job_dir(path: str, job_id_value: str) -> bool:
+        norm = os.path.normpath(path)
+        # Разрешаем удалять только директории, чьё имя ровно равно job_id
+        return os.path.basename(norm) == job_id_value and (
+            norm.startswith(os.path.normpath("/app/jobs"))
+            or norm.startswith(os.path.normpath("/jobs"))
+        )
+
     for job_path in unique_candidates:
+        if not _is_safe_job_dir(job_path, job_id):
+            logger.debug(f"Пропускаем небезопасный путь очистки: {job_path}")
+            continue
         if os.path.exists(job_path):
             try:
                 import shutil
@@ -139,8 +134,9 @@ def cleanup_job_files(
                 logger.info(f"Удалена временная директория задания: {job_path}")
                 return
             except Exception as e:
+                # Переходим к следующему кандидату, не прерываясь на ошибке
                 logger.error(f"Ошибка удаления {job_path}: {str(e)}", exc_info=True)
-                return
+                continue
 
     logger.debug(f"Временная директория не найдена для job_id={job_id}")
 
@@ -148,7 +144,39 @@ def cleanup_job_files(
 # --------------------------------------------------------------------
 # Основная точка входа (обработчик задания)
 # --------------------------------------------------------------------
-error_log = []
+# очищено: удалена неиспользуемая переменная error_log
+
+
+def _merge_with_defaults(raw_input: dict) -> dict:
+    """Заполнить отсутствующие поля значениями по умолчанию из INPUT_VALIDATIONS.
+
+    Правило: если ключ отсутствует в запросе, берём default из схемы; если ключ
+    присутствует (включая явное значение None), используем переданное значение.
+    """
+    normalized = {}
+    for key, spec in INPUT_VALIDATIONS.items():
+        default_value = spec.get("default")
+        if key in raw_input:
+            normalized[key] = raw_input[key]
+        else:
+            normalized[key] = default_value
+    return normalized
+
+
+def _parse_env_float(*env_names: str):
+    """Вернуть первое найденное значение float из переменных окружения.
+
+    Пример: _parse_env_float("NO_SPEECH_THRESHOLD", "ASR_NO_SPEECH_THRESHOLD")
+    """
+    for name in env_names:
+        val = os.getenv(name)
+        if val is not None and val != "":
+            try:
+                return float(val)
+            except Exception:
+                # игнорируем некорректные значения
+                pass
+    return None
 
 
 def run(job):
@@ -157,6 +185,21 @@ def run(job):
 
     # Сбор предупреждений для ответа
     warnings = []
+
+    # Пер‑запросный буфер логов: собираем только логи текущей задачи
+    buf = io.StringIO()
+    temp_handler = logging.StreamHandler(buf)
+    temp_handler.setLevel(logging.DEBUG)
+    temp_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(levelname)s [%(name)s]: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    # Подключаем к логгерам обработчика и предиктора
+    logger.addHandler(temp_handler)
+    _predict_logger = logging.getLogger("predict")
+    _predict_logger.addHandler(temp_handler)
 
     # Диагностика версий
     try:
@@ -183,7 +226,16 @@ def run(job):
     # ------------- проверяем вход по схеме --------------------------
     validated = validate(job_input, INPUT_VALIDATIONS)
     if "errors" in validated:
+        # Возвращаем только логи текущего запроса
+        try:
+            logger.removeHandler(temp_handler)
+            _predict_logger.removeHandler(temp_handler)
+        finally:
+            temp_handler.close()
         return {"error": validated["errors"]}
+
+    # Нормализуем вход: заполняем отсутствующие ключи дефолтами из схемы
+    normalized_input = _merge_with_defaults(job_input)
 
     # ------------- 1) скачиваем основное аудио ----------------------
     try:
@@ -193,45 +245,84 @@ def run(job):
         logger.error("Скачивание аудио не удалось", exc_info=True)
         return {"error": f"download audio: {e}"}
 
-    # ------------- 2) загрузка примеров голосов — отключено ---------
-    # Функциональность speaker_samples не используется и будет удалена.
-    # -----------------------------------------------------------------
-
     # ------------- 3) запуск WhisperX / VAD / диаризации ------------
+    # Значения порогов с учётом приоритета: запрос → ENV → дефолт
+    _no_speech_value = (
+        normalized_input.get("no_speech_threshold")
+        if "no_speech_threshold" in job_input
+        else (
+            _parse_env_float("NO_SPEECH_THRESHOLD", "ASR_NO_SPEECH_THRESHOLD")
+            or normalized_input.get("no_speech_threshold")
+        )
+    )
+    _log_prob_value = (
+        normalized_input.get("log_prob_threshold")
+        if "log_prob_threshold" in job_input
+        else (
+            _parse_env_float("LOGPROB_THRESHOLD", "ASR_LOGPROB_THRESHOLD")
+            or normalized_input.get("log_prob_threshold")
+        )
+    )
+    _compression_ratio_value = (
+        normalized_input.get("compression_ratio_threshold")
+        if "compression_ratio_threshold" in job_input
+        else (
+            _parse_env_float(
+                "COMPRESSION_RATIO_THRESHOLD", "ASR_COMPRESSION_RATIO_THRESHOLD"
+            )
+            or normalized_input.get("compression_ratio_threshold")
+        )
+    )
+
     predict_input = {
         "audio_file": audio_file_path,
-        "model": job_input.get("model", "faster-whisper-large-v3-russian"),
-        "language": job_input.get("language"),
-        "compute_type": job_input.get("compute_type", "float16"),
-        "language_detection_min_prob": job_input.get("language_detection_min_prob", 0),
-        "language_detection_max_tries": job_input.get(
-            "language_detection_max_tries", 5
+        "model": normalized_input.get("model"),
+        "language": normalized_input.get("language"),
+        "compute_type": normalized_input.get("compute_type"),
+        "language_detection_min_prob": normalized_input.get(
+            "language_detection_min_prob"
         ),
-        "batch_size": job_input.get("batch_size", 16),
-        "beam_size": job_input.get("beam_size", 5),
-        "temperature": job_input.get("temperature", 0),
-        "temperature_increment_on_fallback": job_input.get(
+        "language_detection_max_tries": normalized_input.get(
+            "language_detection_max_tries"
+        ),
+        "batch_size": normalized_input.get("batch_size"),
+        "beam_size": normalized_input.get("beam_size"),
+        "temperature": normalized_input.get("temperature"),
+        "temperature_increment_on_fallback": normalized_input.get(
             "temperature_increment_on_fallback"
         ),
-        "vad_onset": job_input.get("vad_onset", 0.50),
-        "vad_offset": job_input.get("vad_offset", 0.363),
-        "align_output": job_input.get("align_output", False),
-        "diarization": job_input.get("diarization", False),
-        "diarize": job_input.get("diarize"),
+        "vad_onset": normalized_input.get("vad_onset"),
+        "vad_offset": normalized_input.get("vad_offset"),
+        "min_duration_on": normalized_input.get("min_duration_on"),
+        "min_duration_off": normalized_input.get("min_duration_off"),
+        "pad_onset": normalized_input.get("pad_onset"),
+        "pad_offset": normalized_input.get("pad_offset"),
+        "align_output": normalized_input.get("align_output"),
+        "diarization": normalized_input.get("diarization"),
+        "diarize": normalized_input.get("diarize"),
         # токен: сначала из входа, иначе из ENV (hf_token загружен выше)
-        "huggingface_access_token": job_input.get("huggingface_access_token")
+        "huggingface_access_token": normalized_input.get("huggingface_access_token")
         or hf_token,
-        "min_speakers": job_input.get("min_speakers"),
-        "max_speakers": job_input.get("max_speakers"),
-        "length_penalty": job_input.get("length_penalty"),
-        "output_format": job_input.get("output_format", "json"),
-        "debug": job_input.get("debug", False),
+        "min_speakers": normalized_input.get("min_speakers"),
+        "max_speakers": normalized_input.get("max_speakers"),
+        "length_penalty": normalized_input.get("length_penalty"),
+        "no_speech_threshold": _no_speech_value,
+        "log_prob_threshold": _log_prob_value,
+        "compression_ratio_threshold": _compression_ratio_value,
+        "output_format": normalized_input.get("output_format"),
+        "debug": normalized_input.get("debug"),
     }
 
     try:
         result = MODEL.predict(**predict_input)
     except Exception as e:
         logger.error("Ошибка распознавания WhisperX", exc_info=True)
+        # Перед возвратом снимаем пер‑запросный хендлер
+        try:
+            logger.removeHandler(temp_handler)
+            _predict_logger.removeHandler(temp_handler)
+        finally:
+            temp_handler.close()
         return {"error": f"predict: {e}"}
 
     output_dict = {
@@ -244,13 +335,8 @@ def run(job):
     if warnings:
         output_dict["warnings"] = warnings
 
-    # 5) приложим логи контейнера к ответу (хвост файла)
-    try:
-        log_path = os.path.abspath("container_log.txt")
-        logs = _tail_file(log_path, max_bytes=200_000)
-        output_dict["logs"] = logs
-    except Exception as e:
-        logger.warning(f"Не удалось прочитать логи: {e}")
+    # 5) приложим логи только текущего запроса
+    output_dict["logs"] = buf.getvalue()
 
     # 5) очистка и возврат результата
     try:
@@ -259,53 +345,14 @@ def run(job):
     except Exception as e:
         logger.warning(f"Cleanup issue: {e}", exc_info=True)
 
+    # Снимаем пер‑запросный хендлер и освобождаем буфер
+    try:
+        logger.removeHandler(temp_handler)
+        _predict_logger.removeHandler(temp_handler)
+    finally:
+        temp_handler.close()
     return output_dict
 
 
 # Запускаем воркер после определения всех функций
 runpod.serverless.start({"handler": run})
-#     embeddings = {} # ensure the name is always bound
-#     if job_input.get("speaker_verification", True):
-#         logger.info(f"Speaker-verification requested: True")
-#         try:
-#             embeddings = load_known_speakers_from_samples(
-#                 speaker_profiles,
-#                 huggingface_access_token=predict_input["huggingface_access_token"]
-#             )
-#             logger.info(f"  • Enrolled {len(embeddings)} profiles")
-#         except Exception as e:
-#             logger.error("Failed loading speaker profiles", exc_info=True)
-#             output_dict["warning"] = f"enrollment skipped: {e}"
-
-#         embedding_log_data = None  # Initialize here to avoid UnboundLocalError
-
-#         if embeddings:  # only attempt verification if we actually got something
-#             try:
-#                 output_dict, embedding_log_data = process_diarized_output(
-#                     output_dict,
-#                     audio_file_path,
-#                     embeddings,
-#                     huggingface_access_token=job_input.get("huggingface_access_token"),
-#                     return_logs=False # <-- set to True for debugging
-#             except Exception as e:
-#                 logger.error("Error during speaker verification", exc_info=True)
-#                 output_dict["warning"] = f"verification skipped: {e}"
-#         else:
-#             logger.info("No embeddings to verify against; skipping verification step")
-
-#     if embedding_log_data:
-#         output_dict["embedding_logs"] = embedding_log_data
-
-#     # Очистка
-#     try:
-#         rp_cleanup.clean(["input_objects"])
-#         cleanup_job_files(job_id)
-#     except Exception as e:
-#         logger.warning(f"Cleanup issue: {e}", exc_info=True)
-
-#     if error_log:
-#         output_dict["error_log"] = "\n".join(error_log)
-
-#     return output_dict
-
-# runpod.serverless.start({"handler": run})

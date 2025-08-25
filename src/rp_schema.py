@@ -6,12 +6,9 @@ INPUT_VALIDATIONS = {
         "default": "faster-whisper-large-v3-russian",
     },
     "language": {"type": str, "required": False, "default": None},
-    # Только GPU: фиксируем cuda:0 и не принимаем CPU‑ветки
     "compute_type": {"type": str, "required": False, "default": "float16"},
-    # language_detection_* скрыты из публичной таблицы; доступны, но ставим дефолты
     "language_detection_min_prob": {"type": float, "required": False, "default": 0},
     "language_detection_max_tries": {"type": int, "required": False, "default": 5},
-    # initial_prompt удалён из внешнего API
     "batch_size": {"type": int, "required": False, "default": 64},
     "beam_size": {"type": int, "required": False, "default": None},
     "temperature": {"type": float, "required": False, "default": 0},
@@ -20,16 +17,22 @@ INPUT_VALIDATIONS = {
         "required": False,
         "default": None,
     },
-    "vad_onset": {"type": float, "required": False, "default": 0.500},
-    "vad_offset": {"type": float, "required": False, "default": 0.363},
+    "vad_onset": {"type": float, "required": False, "default": 0.30},
+    "vad_offset": {"type": float, "required": False, "default": 0.250},
+    "min_duration_on": {"type": float, "required": False, "default": 0.08},
+    "min_duration_off": {"type": float, "required": False, "default": 0.08},
+    "pad_onset": {"type": float, "required": False, "default": 0.0},
+    "pad_offset": {"type": float, "required": False, "default": 0.0},
     "align_output": {"type": bool, "required": False, "default": False},
     "output_format": {"type": str, "required": False, "default": "json"},
     "diarization": {"type": bool, "required": False, "default": False},
-    # alias for compatibility with other workers
     "diarize": {"type": bool, "required": False, "default": None},
     "huggingface_access_token": {"type": str, "required": False, "default": None},
     "min_speakers": {"type": int, "required": False, "default": None},
     "max_speakers": {"type": int, "required": False, "default": None},
     "length_penalty": {"type": float, "required": False, "default": None},
+    "no_speech_threshold": {"type": float, "required": False, "default": 0.60},
+    "log_prob_threshold": {"type": float, "required": False, "default": -1.0},
+    "compression_ratio_threshold": {"type": float, "required": False, "default": 2.4},
     "debug": {"type": bool, "required": False, "default": False},
 }
